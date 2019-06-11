@@ -1,0 +1,28 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: managedresource-example1
+  namespace: default
+type: Opaque
+data:
+  namespace.yaml: YXBpVmVyc2lvbjogdjEKa2luZDogTmFtZXNwYWNlCm1ldGFkYXRhOgogIG5hbWU6IG1hbmFnZWQtbmFtZXNwYWNlLTEK
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: managedresource-example2
+  namespace: default
+type: Opaque
+data:
+  namespace.yaml: YXBpVmVyc2lvbjogdjEKa2luZDogTmFtZXNwYWNlCm1ldGFkYXRhOgogIG5hbWU6IG1hbmFnZWQtbmFtZXNwYWNlLTIK
+---
+apiVersion: resources.gardener.cloud/v1alpha1
+kind: ManagedResource
+metadata:
+  name: example
+  namespace: default
+spec:
+  secretRefs:
+  - name: managedresource-example1
+  - name: managedresource-example2
