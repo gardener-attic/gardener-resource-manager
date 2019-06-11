@@ -33,6 +33,18 @@ type ManagedResource struct {
 	Status ManagedResourceStatus `json:"status,omitempty"`
 }
 
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// ManagedResourceList is a list of ManagedResource resources.
+type ManagedResourceList struct {
+	metav1.TypeMeta `json:",inline"`
+	// +optional
+	metav1.ListMeta `json:"metadata,omitempty"`
+
+	// Items is the list of ManagedResource.
+	Items []ManagedResource `json:"items"`
+}
+
 type ManagedResourceSpec struct {
 	// SecretRefs is a list of secret references.
 	SecretRefs []corev1.LocalObjectReference `json:"secretRefs"`
@@ -43,4 +55,7 @@ type ManagedResourceStatus struct {
 	// Conditions represents the latest available observations of a ControllerInstallations's current state.
 	// +optional
 	Conditions []gardencore.Condition `json:"conditions,omitempty"`
+	// Resources is a list of objects that have been created.
+	// +optional
+	Resources []corev1.ObjectReference `json:"resources,omitempty"`
 }

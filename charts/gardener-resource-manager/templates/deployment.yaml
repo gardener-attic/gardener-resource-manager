@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gardener-resource-manager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: gardener-resource-manager
+    helm.sh/chart: gardener-resource-manager
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gardener-resource-manager
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      {{- if .Values.targetKubeconfig }}
+      annotations:
+        checksum/secret-gardener-resource-manager-target-kubeconfig: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+      {{- end }}
+      labels:
+        app.kubernetes.io/name: gardener-resource-manager
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: gardener-resource-manager
+      containers:
+      - name: gardener-resource-manager
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - /gardener-resource-manager
+        - --leader-election={{ .Values.leaderElection.enabled }}
+        - --leader-election-namespace=${LEADER_ELECTION_NAMESPACE}
+        - --sync-period={{ .Values.syncPeriod }}
+        {{- if .Values.targetKubeconfig }}
+        - --target-kubeconfig=/etc/gardener-resource-manager/target-kubeconfig/kubeconfig.yaml
+        {{- end }}
+        - --max-concurrent-workers={{ .Values.concurrentSyncs }}
+        env:
+        - name: LEADER_ELECTION_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+{{ toYaml .Values.resources | nindent 12 }}
+{{- if .Values.targetKubeconfig }}
+        volumeMounts:
+        - name: target-kubeconfig
+          mountPath: /etc/gardener-resource-manager/target-kubeconfig
+      volumes:
+      - name: target-kubeconfig
+        secret:
+          secretName: gardener-resource-manager-target-kubeconfig
+          defaultMode: 420
+{{- end }}

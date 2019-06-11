@@ -1,4 +1,4 @@
-// Copyright (c) 2018 SAP SE or an SAP affiliate company. All rights reserved. This file is licensed under the Apache Software License, v. 2 except as noted otherwise in the LICENSE file
+// Copyright (c) 2019 SAP SE or an SAP affiliate company. All rights reserved. This file is licensed under the Apache Software License, v. 2 except as noted otherwise in the LICENSE file
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,15 +15,20 @@
 package v1alpha1
 
 import (
+	resources "github.com/gardener/gardener-resource-manager/pkg/apis/resources"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
-const GroupName = "resources.gardener.cloud"
-
 // SchemeGroupVersion is group version used to register these objects
-var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1alpha1"}
+var SchemeGroupVersion = schema.GroupVersion{Group: resources.GroupName, Version: "v1alpha1"}
+
+// Kind takes an unqualified kind and returns back a Group qualified GroupKind
+func Kind(kind string) schema.GroupKind {
+	return SchemeGroupVersion.WithKind(kind).GroupKind()
+}
 
 // Resource takes an unqualified resource and returns a Group qualified GroupResource
 func Resource(resource string) schema.GroupResource {
@@ -31,24 +36,16 @@ func Resource(resource string) schema.GroupResource {
 }
 
 var (
-	// SchemeBuilder used to register the Shoot resource.
-	SchemeBuilder      runtime.SchemeBuilder
-	localSchemeBuilder = &SchemeBuilder
-	// AddToScheme is a pointer to SchemeBuilder.AddToScheme.
-	AddToScheme = localSchemeBuilder.AddToScheme
+	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
+	AddToScheme   = SchemeBuilder.AddToScheme
 )
 
-func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
-	localSchemeBuilder.Register(addDefaultingFuncs, addKnownTypes)
-}
-
-// Adds the list of known types to api.Scheme.
+// Adds the list of known types to Scheme.
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&ManagedResource{},
+		&ManagedResourceList{},
 	)
+	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil
 }

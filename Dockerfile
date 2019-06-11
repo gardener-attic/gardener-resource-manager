@@ -1,20 +1,30 @@
-############# builder #############
-FROM golang:1.12.5 AS builder
+#############      builder-base                             #############
+FROM golang:1.12.5 AS builder-base
+
+COPY ./hack/install-requirements.sh /install-requirements.sh
+COPY ./tools /tools
+
+RUN /install-requirements.sh
+
+#############      builder                                  #############
+FROM builder-base AS builder
+
+ARG VERIFY=true
 
 WORKDIR /go/src/github.com/gardener/gardener-resource-manager
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go install \
-  -ldflags "-X github.com/gardener/gardener-resource-manager/pkg/version.gitVersion=$(cat VERSION) \
-            -X github.com/gardener/gardener-resource-manager/pkg/version.gitTreeState=$([ -z git status --porcelain 2>/dev/null ] && echo clean || echo dirty) \
-            -X github.com/gardener/gardener-resource-manager/pkg/version.gitCommit=$(git rev-parse --verify HEAD) \
-            -X github.com/gardener/gardener-resource-manager/pkg/version.buildDate=$(date --rfc-3339=seconds | sed 's/ /T/')" \
-  ./...
+RUN make VERIFY=$VERIFY all
 
-############# resource-manager #############
-FROM alpine:3.9 AS resource-manager
+#############      base                                     #############
+FROM alpine:3.8 AS base
 
 RUN apk add --update bash curl
+
+WORKDIR /
+
+#############      gardener-resource-manager                #############
+FROM base AS gardener-resource-manager
 
 COPY --from=builder /go/bin/gardener-resource-manager /gardener-resource-manager
 

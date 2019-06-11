@@ -162,6 +162,7 @@
   revision = "d6023ce2651d8eafb5c75bb0c7167536102ec9f5"
 
 [[projects]]
+  branch = "gardener-extensions-fixes"
   digest = "1:b333dd68364c4080e22fabcd0dd24ed34a713c2042bf30dd412ac9d65d13dd02"
   name = "github.com/gardener/gardener"
   packages = [
@@ -192,7 +193,7 @@
     "pkg/utils/secrets",
   ]
   pruneopts = "NUT"
-  revision = "f718e4bd65f08a62a8fa7836dcebb8e7d2476c1e"
+  revision = "c14e1eebd26fa76ea0f4cc7195f83bad6562ec14"
 
 [[projects]]
   digest = "1:f99c0695751cb3abdc0f1ebb11145142909e5572d83939f28b1279686185c0cd"
@@ -430,17 +431,6 @@
   version = "v1.0"
 
 [[projects]]
-  digest = "1:0c11e987235e8f37af4e9f24cca02754827d009e8b66cf24483b0006504f6045"
-  name = "github.com/jmoiron/sqlx"
-  packages = [
-    ".",
-    "reflectx",
-  ]
-  pruneopts = "NUT"
-  revision = "d161d7a76b5661016ad0b085869f77fd410f3e6a"
-  version = "v1.2.0"
-
-[[projects]]
   digest = "1:4e903242fe176238aaa469f59d7035f5abf2aa9acfefb8964ddd203651b574e9"
   name = "github.com/json-iterator/go"
   packages = ["."]
@@ -455,18 +445,6 @@
   pruneopts = "NUT"
   revision = "f55edac94c9bbba5d6182a4be46d86a2c9b5b50e"
   version = "v1.0.2"
-
-[[projects]]
-  digest = "1:3493089e5754b1471b97e783de2fb38f5bd4b68728d09046ec4a1e7e6ec48574"
-  name = "github.com/lib/pq"
-  packages = [
-    ".",
-    "oid",
-    "scram",
-  ]
-  pruneopts = "NUT"
-  revision = "bc6a3c0594130b1e34005880bc600b6d3f49fa7f"
-  version = "v1.1.1"
 
 [[projects]]
   branch = "master"
@@ -519,6 +497,54 @@
   pruneopts = "NUT"
   revision = "4b7aa43c6742a2c18fdef89dd197aaae7dac7ccd"
   version = "1.0.1"
+
+[[projects]]
+  digest = "1:044fe5b2b6dbdc0f41090e86466c27f480e7af860f425708b723008616625915"
+  name = "github.com/onsi/ginkgo"
+  packages = [
+    ".",
+    "config",
+    "internal/codelocation",
+    "internal/containernode",
+    "internal/failer",
+    "internal/leafnodes",
+    "internal/remote",
+    "internal/spec",
+    "internal/spec_iterator",
+    "internal/specrunner",
+    "internal/suite",
+    "internal/testingtproxy",
+    "internal/writer",
+    "reporters",
+    "reporters/stenographer",
+    "reporters/stenographer/support/go-colorable",
+    "reporters/stenographer/support/go-isatty",
+    "types",
+  ]
+  pruneopts = "NUT"
+  revision = "9eda700730cba42af70d53180f9dcce9266bc2bc"
+  version = "v1.4.0"
+
+[[projects]]
+  digest = "1:feed851b93f9debbe8180092067c4e29a51c06dbb5fe2f643ec9feea039670a3"
+  name = "github.com/onsi/gomega"
+  packages = [
+    ".",
+    "format",
+    "internal/assertion",
+    "internal/asyncassertion",
+    "internal/oraclematcher",
+    "internal/testingtsupport",
+    "matchers",
+    "matchers/support/goraph/bipartitegraph",
+    "matchers/support/goraph/edge",
+    "matchers/support/goraph/node",
+    "matchers/support/goraph/util",
+    "types",
+  ]
+  pruneopts = "NUT"
+  revision = "003f63b7f4cff3fc95357005358af2de0f5fe152"
+  version = "v1.3.0"
 
 [[projects]]
   digest = "1:e0cc8395ea893c898ff5eb0850f4d9851c1f57c78c232304a026379a47a552d0"
@@ -601,17 +627,6 @@
   pruneopts = "NUT"
   revision = "833678b5bb319f2d20a475cb165c6cc59c2cc77c"
   version = "v0.0.2"
-
-[[projects]]
-  branch = "master"
-  digest = "1:6c9ffc8e817fe638d8169ceadc7bb32b12973ff953c2e686d4ac2a487024a6b2"
-  name = "github.com/rubenv/sql-migrate"
-  packages = [
-    ".",
-    "sqlparse",
-  ]
-  pruneopts = "NUT"
-  revision = "54bad0a9b051368ffec9cd2b869789c2b8eaea35"
 
 [[projects]]
   digest = "1:118f00f400c10c1dd21a267fd04697c758dbe9a38cf5fa3fab3bb3625af9efe7"
@@ -712,12 +727,15 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:ee8f13c45bdb065114f89560096e1ed9ba4aeb5dbdc6a1ce1be61d17c22deab7"
+  digest = "1:9ee67f18b31b91edbd61c180b3f576333c4cf3f119ca4d66856e5e2f34d77c46"
   name = "golang.org/x/net"
   packages = [
     "bpf",
     "context",
     "context/ctxhttp",
+    "html",
+    "html/atom",
+    "html/charset",
     "http/httpguts",
     "http2",
     "http2/hpack",
@@ -764,14 +782,20 @@
   revision = "301114b31cced3624480dfb114ca1b495ec69aa5"
 
 [[projects]]
-  digest = "1:dfcb3d446a3c6a6c71b74cf7baf366cd630a8cb43c3fcb741f34e49727da168d"
+  digest = "1:0b5dc8c3581fc3ea2b80cc2e360dfb9c2d61dd0cba0d2fe247e8edd3e83f7551"
   name = "golang.org/x/text"
   packages = [
     "collate",
     "collate/build",
     "encoding",
+    "encoding/charmap",
+    "encoding/htmlindex",
     "encoding/internal",
     "encoding/internal/identifier",
+    "encoding/japanese",
+    "encoding/korean",
+    "encoding/simplifiedchinese",
+    "encoding/traditionalchinese",
     "encoding/unicode",
     "internal/colltab",
     "internal/gen",
@@ -888,14 +912,6 @@
   pruneopts = "NUT"
   revision = "501c41df7f472c740d0674ff27122f3f48c80ce7"
   version = "v1.21.1"
-
-[[projects]]
-  digest = "1:1bfe1fa433123b451bb1a2a1a5d094322821b9463f5bf8eade67e71d7532e3d0"
-  name = "gopkg.in/gorp.v1"
-  packages = ["."]
-  pruneopts = "NUT"
-  revision = "6a667da9c028871f98598d85413e3fc4c6daa52e"
-  version = "v1.7.2"
 
 [[projects]]
   digest = "1:2d1fbdc6777e5408cabeb02bf336305e724b925ff4546ded0fa8715a7267922a"
@@ -1458,14 +1474,27 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/gardener/gardener-extensions/pkg/controller",
     "github.com/gardener/gardener-extensions/pkg/controller/cmd",
     "github.com/gardener/gardener/pkg/apis/core",
+    "github.com/go-logr/logr",
+    "github.com/hashicorp/go-multierror",
+    "github.com/onsi/ginkgo",
+    "github.com/onsi/gomega",
     "github.com/spf13/cobra",
     "k8s.io/api/core/v1",
+    "k8s.io/apimachinery/pkg/api/errors",
     "k8s.io/apimachinery/pkg/apis/meta/v1",
+    "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured",
     "k8s.io/apimachinery/pkg/runtime",
     "k8s.io/apimachinery/pkg/runtime/schema",
+    "k8s.io/apimachinery/pkg/types",
     "k8s.io/apimachinery/pkg/util/runtime",
+    "k8s.io/apimachinery/pkg/util/sets",
+    "k8s.io/apimachinery/pkg/util/yaml",
+    "k8s.io/client-go/rest",
+    "k8s.io/client-go/tools/clientcmd",
+    "k8s.io/client-go/util/retry",
     "k8s.io/code-generator/cmd/client-gen",
     "k8s.io/code-generator/cmd/conversion-gen",
     "k8s.io/code-generator/cmd/deepcopy-gen",
@@ -1474,10 +1503,14 @@
     "k8s.io/code-generator/cmd/lister-gen",
     "sigs.k8s.io/controller-runtime",
     "sigs.k8s.io/controller-runtime/pkg/client",
+    "sigs.k8s.io/controller-runtime/pkg/client/config",
     "sigs.k8s.io/controller-runtime/pkg/controller",
     "sigs.k8s.io/controller-runtime/pkg/handler",
     "sigs.k8s.io/controller-runtime/pkg/manager",
+    "sigs.k8s.io/controller-runtime/pkg/predicate",
+    "sigs.k8s.io/controller-runtime/pkg/reconcile",
     "sigs.k8s.io/controller-runtime/pkg/runtime/log",
+    "sigs.k8s.io/controller-runtime/pkg/runtime/signals",
     "sigs.k8s.io/controller-runtime/pkg/source",
   ]
   solver-name = "gps-cdcl"

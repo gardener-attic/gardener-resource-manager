@@ -16,11 +16,9 @@ REGISTRY                    := eu.gcr.io/gardener-project
 IMAGE_PREFIX                := $(REGISTRY)/gardener
 REPO_ROOT                   := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 HACK_DIR                    := $(REPO_ROOT)/hack
-HOSTNAME                    := $(shell hostname)
 VERSION                     := $(shell cat VERSION)
 LD_FLAGS                    := "-w -X github.com/gardener/gardener-resource-manager/pkg/version.Version=$(IMAGE_TAG)"
 VERIFY                      := true
-LEADER_ELECTION             := false
 
 ### Build commands
 
@@ -76,6 +74,9 @@ revendor:
 
 .PHONY: start
 start:
-	@LEADER_ELECTION_NAMESPACE=garden go run \
+	@go run \
 		-ldflags $(LD_FLAGS) \
-		./cmd/gardener-resource-manager
+		./cmd/gardener-resource-manager \
+	  --leader-election=false \
+	  --sync-period=60s \
+	  --max-concurrent-workers=10

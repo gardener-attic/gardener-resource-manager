@@ -6,7 +6,18 @@ metadata:
   namespace: default
 type: Opaque
 data:
-  namespace.yaml: YXBpVmVyc2lvbjogdjEKa2luZDogTmFtZXNwYWNlCm1ldGFkYXRhOgogIG5hbWU6IG1hbmFnZWQtbmFtZXNwYWNlLTEK
+  objects.yaml: YXBpVmVyc2lvbjogdjEKa2luZDogQ29uZmlnTWFwCm1ldGFkYXRhOgogIG5hbWU6IHRlc3QtMTIzNAogIG5hbWVzcGFjZTogZGVmYXVsdAotLS0KYXBpVmVyc2lvbjogdjEKa2luZDogQ29uZmlnTWFwCm1ldGFkYXRhOgogIG5hbWU6IHRlc3QtNTY3OAogIG5hbWVzcGFjZTogZGVmYXVsdAo=
+    # apiVersion: v1
+    # kind: ConfigMap
+    # metadata:
+    #   name: test-1234
+    #   namespace: default
+    # ---
+    # apiVersion: v1
+    # kind: ConfigMap
+    # metadata:
+    #   name: test-5678
+    #   namespace: default
 ---
 apiVersion: v1
 kind: Secret
@@ -15,7 +26,13 @@ metadata:
   namespace: default
 type: Opaque
 data:
-  namespace.yaml: YXBpVmVyc2lvbjogdjEKa2luZDogTmFtZXNwYWNlCm1ldGFkYXRhOgogIG5hbWU6IG1hbmFnZWQtbmFtZXNwYWNlLTIK
+  other-objects.yaml: YXBpVmVyc2lvbjogdjEKa2luZDogU2VjcmV0Cm1ldGFkYXRhOgogIG5hbWU6IHRlc3QtMDEzNTcKICBuYW1lc3BhY2U6IGRlZmF1bHQKdHlwZTogT3BhcXVlCg==
+    # apiVersion: v1
+    # kind: Secret
+    # metadata:
+    #   name: test-01357
+    #   namespace: default
+    # type: Opaque
 ---
 apiVersion: resources.gardener.cloud/v1alpha1
 kind: ManagedResource

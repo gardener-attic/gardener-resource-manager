@@ -1,0 +1,21 @@
+image:
+  repository: eu.gcr.io/gardener-project/gardener/gardener-resource-manager
+  tag: latest
+  pullPolicy: IfNotPresent
+
+resources: {}
+
+syncPeriod: 1m0s
+concurrentSyncs: 10
+
+leaderElection:
+  enabled: true
+
+# targetKubeconfig: |
+#   apiVersion: v1
+#   clusters:
+#   - cluster:
+#       insecure-skip-tls-verify: true
+#       server: https://127.0.0.1:6443
+#     name: docker-desktop
+#   ...

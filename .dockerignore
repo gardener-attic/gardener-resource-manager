@@ -2,8 +2,11 @@
 **
 
 # Exclude folders relevant for build
+!charts/
+!cmd/
 !pkg/
 !hack/
+!tools/
 !vendor/
 !VERSION
 !Makefile
