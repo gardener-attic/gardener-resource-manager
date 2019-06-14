@@ -153,5 +153,9 @@ func getTargetClient(kubeconfigPath string) (client.Client, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	targetConfig.QPS = 100.0
+	targetConfig.Burst = 130
+
 	return client.New(targetConfig, client.Options{})
 }
