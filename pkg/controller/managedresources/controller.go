@@ -131,7 +131,7 @@ func (r *reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 		return ctrl.Result{}, err
 	}
 
-	if err := extensionscontroller.TryUpdateStatus(r.ctx, retry.DefaultBackoff, r.targetClient, mr, func() error {
+	if err := extensionscontroller.TryUpdateStatus(r.ctx, retry.DefaultBackoff, r.client, mr, func() error {
 		mr.Status.ObservedGeneration = mr.Generation
 		mr.Status.Resources = newResourcesObjectReferences
 		return nil
