@@ -26,13 +26,12 @@ metadata:
   namespace: default
 type: Opaque
 data:
-  other-objects.yaml: YXBpVmVyc2lvbjogdjEKa2luZDogU2VjcmV0Cm1ldGFkYXRhOgogIG5hbWU6IHRlc3QtMDEzNTcKICBuYW1lc3BhY2U6IGRlZmF1bHQKdHlwZTogT3BhcXVlCg==
+  other-objects.yaml: YXBpVmVyc2lvbjogdjEKa2luZDogU2VydmljZUFjY291bnQKbWV0YWRhdGE6CiAgbmFtZTogdGVzdC01Njc4CiAgbmFtZXNwYWNlOiBkZWZhdWx0Cg==
     # apiVersion: v1
-    # kind: Secret
+    # kind: ServiceAccount
     # metadata:
-    #   name: test-01357
+    #   name: test-5678
     #   namespace: default
-    # type: Opaque
 ---
 apiVersion: resources.gardener.cloud/v1alpha1
 kind: ManagedResource

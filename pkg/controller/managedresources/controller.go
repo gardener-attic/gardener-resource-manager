@@ -177,23 +177,21 @@ func (r *reconciler) applyNewResources(newResourcesObjects []*unstructured.Unstr
 		errorList = []error{}
 	)
 
-	for _, obj := range newResourcesObjects {
+	for _, desired := range newResourcesObjects {
 		wg.Add(1)
 
-		go func(obj *unstructured.Unstructured) {
+		go func(desired *unstructured.Unstructured) {
 			defer wg.Done()
 
-			o := unstructuredToString(obj)
-			objectCopy := obj.DeepCopy()
-			r.log.Info("Applying", "resource", o)
+			current := desired.DeepCopy()
+			r.log.Info("Applying", "resource", unstructuredToString(desired))
 
 			results <- retry.RetryOnConflict(retry.DefaultBackoff, func() (err error) {
-				return extensionscontroller.CreateOrUpdate(r.ctx, r.targetClient, obj, func() error {
-					*obj = *objectCopy
-					return nil
+				return extensionscontroller.CreateOrUpdate(r.ctx, r.targetClient, current, func() error {
+					return merge(desired, current)
 				})
 			})
-		}(obj)
+		}(desired)
 	}
 
 	go func() {
