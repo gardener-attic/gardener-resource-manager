@@ -18,9 +18,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sync"
 
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
-	"github.com/hashicorp/go-multierror"
 
 	extensionscontroller "github.com/gardener/gardener-extensions/pkg/controller"
 	"github.com/go-logr/logr"
@@ -87,9 +87,9 @@ func (r *reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 		newResourcesSet              = sets.NewString()
 	)
 
-	for _, s := range mr.Spec.SecretRefs {
+	for _, ref := range mr.Spec.SecretRefs {
 		secret := &corev1.Secret{}
-		if err := r.client.Get(r.ctx, types.NamespacedName{Namespace: mr.Namespace, Name: s.Name}, secret); err != nil {
+		if err := r.client.Get(r.ctx, types.NamespacedName{Namespace: mr.Namespace, Name: ref.Name}, secret); err != nil {
 			log.Error(err, "Could not read secret", "name", secret.Name)
 			return reconcile.Result{}, err
 		}
@@ -171,61 +171,110 @@ func (r *reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logg
 }
 
 func (r *reconciler) applyNewResources(newResourcesObjects []*unstructured.Unstructured) error {
-	var result error
+	var (
+		results   = make(chan error)
+		wg        sync.WaitGroup
+		errorList = []error{}
+	)
 
 	for _, obj := range newResourcesObjects {
-		o := unstructuredToString(obj)
-		objectCopy := obj.DeepCopy()
-		r.log.Info("Applying", "resource", o)
+		wg.Add(1)
 
-		if err := extensionscontroller.CreateOrUpdate(r.ctx, r.targetClient, obj, func() error {
-			*obj = *objectCopy
-			return nil
-		}); err != nil {
-			r.log.Error(err, "Error during apply", "resource", o)
-			result = multierror.Append(result, err)
+		go func(obj *unstructured.Unstructured) {
+			defer wg.Done()
+
+			o := unstructuredToString(obj)
+			objectCopy := obj.DeepCopy()
+			r.log.Info("Applying", "resource", o)
+
+			results <- retry.RetryOnConflict(retry.DefaultBackoff, func() (err error) {
+				return extensionscontroller.CreateOrUpdate(r.ctx, r.targetClient, obj, func() error {
+					*obj = *objectCopy
+					return nil
+				})
+			})
+		}(obj)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	for err := range results {
+		if err != nil {
+			errorList = append(errorList, err)
 		}
 	}
 
-	return result
+	if len(errorList) > 0 {
+		return fmt.Errorf("Errors occurred during applying: %+v", errorList)
+	}
+
+	return nil
 }
 
 func (r *reconciler) cleanOldResources(mr *resourcesv1alpha1.ManagedResource, newResourcesSet sets.String) (bool, error) {
+	type output struct {
+		resource        string
+		deletionPending bool
+		err             error
+	}
+
 	var (
-		deleted = true
-		result  error
+		results   = make(chan *output)
+		wg        sync.WaitGroup
+		errorList = []error{}
 	)
 
 	for _, oldResource := range mr.Status.Resources {
 		resource := objectReferenceToString(oldResource)
 
 		if !newResourcesSet.Has(resource) {
-			obj := &unstructured.Unstructured{}
-			obj.SetAPIVersion(oldResource.APIVersion)
-			obj.SetKind(oldResource.Kind)
-			obj.SetNamespace(oldResource.Namespace)
-			obj.SetName(oldResource.Name)
+			wg.Add(1)
 
-			r.log.Info("Deleting", "resource", resource)
-			if err := r.targetClient.Delete(r.ctx, obj); err != nil {
-				if !apierrors.IsNotFound(err) {
-					r.log.Error(err, "Error during deletion", "resource", resource)
-					result = multierror.Append(result, err)
+			go func(ref corev1.ObjectReference) {
+				defer wg.Done()
+
+				obj := &unstructured.Unstructured{}
+				obj.SetAPIVersion(ref.APIVersion)
+				obj.SetKind(ref.Kind)
+				obj.SetNamespace(ref.Namespace)
+				obj.SetName(ref.Name)
+
+				r.log.Info("Deleting", "resource", resource)
+				if err := r.targetClient.Delete(r.ctx, obj); err != nil {
+					if !apierrors.IsNotFound(err) {
+						r.log.Error(err, "Error during deletion", "resource", resource)
+						results <- &output{resource, true, err}
+						return
+					}
+					results <- &output{resource, false, nil}
+					return
 				}
-				continue
-			}
-			deleted = false
+				results <- &output{resource, true, nil}
+			}(oldResource)
 		}
 	}
 
-	if result != nil {
-		return false, result
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	for out := range results {
+		if out.deletionPending {
+			return true, fmt.Errorf("deletion of old resource %s is still pending", out.resource)
+		}
+
+		if out.err != nil {
+			errorList = append(errorList, out.err)
+		}
 	}
 
-	if !deleted {
-		return true, fmt.Errorf("deletion of old resources is still pending")
+	if len(errorList) > 0 {
+		return true, fmt.Errorf("Errors occurred during deletion: %+v", errorList)
 	}
-
 	return false, nil
 }
 
