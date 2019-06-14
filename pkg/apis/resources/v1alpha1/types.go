@@ -52,6 +52,8 @@ type ManagedResourceSpec struct {
 
 // ManagedResourceStatus is the status of a managed resource.
 type ManagedResourceStatus struct {
+	// ObservedGeneration is the most recent generation observed for this resource.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// Conditions represents the latest available observations of a ControllerInstallations's current state.
 	// +optional
 	Conditions []gardencore.Condition `json:"conditions,omitempty"`

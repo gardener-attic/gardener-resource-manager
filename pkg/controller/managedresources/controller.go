@@ -132,6 +132,7 @@ func (r *reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 	}
 
 	if err := extensionscontroller.TryUpdateStatus(r.ctx, retry.DefaultBackoff, r.targetClient, mr, func() error {
+		mr.Status.ObservedGeneration = mr.Generation
 		mr.Status.Resources = newResourcesObjectReferences
 		return nil
 	}); err != nil {

@@ -52,6 +52,7 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 		syncPeriod              time.Duration
 		targetKubeconfigPath    string
 		maxConcurrentWorkers    int
+		namespace               string
 	)
 
 	cmd := &cobra.Command{
@@ -63,6 +64,7 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 				LeaderElectionID:        "gardener-resource-manager",
 				LeaderElectionNamespace: leaderElectionNamespace,
 				SyncPeriod:              &syncPeriod,
+				Namespace:               namespace,
 			})
 			if err != nil {
 				entryLog.Error(err, "could not instantiate manager")
@@ -92,14 +94,24 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 				os.Exit(1)
 			}
 
-			if err := c.Watch(&source.Kind{Type: &resourcesv1alpha1.ManagedResource{}}, &handler.EnqueueRequestForObject{}); err != nil {
+			if err := c.Watch(
+				&source.Kind{Type: &resourcesv1alpha1.ManagedResource{}},
+				&handler.EnqueueRequestForObject{},
+				managedresources.GenerationChangedPredicate(),
+			); err != nil {
 				entryLog.Error(err, "unable to watch ManagedResources")
 				os.Exit(1)
 			}
-			if err := c.Watch(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestsFromMapFunc{ToRequests: managedresources.SecretToManagedResourceMapper(mgr.GetClient(), nil)}); err != nil {
+			if err := c.Watch(
+				&source.Kind{Type: &corev1.Secret{}},
+				&handler.EnqueueRequestsFromMapFunc{ToRequests: managedresources.SecretToManagedResourceMapper(mgr.GetClient(), nil)},
+			); err != nil {
 				entryLog.Error(err, "unable to watch Secrets mapping to ManagedResources")
 				os.Exit(1)
 			}
+
+			entryLog.Info("Managed namespace: " + namespace)
+			entryLog.Info("Sync period: " + syncPeriod.String())
 
 			if err := mgr.Start(ctx.Done()); err != nil {
 				entryLog.Error(err, "error running manager")
@@ -113,6 +125,7 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 	cmd.Flags().DurationVar(&syncPeriod, "sync-period", time.Minute, "duration how often existing resources should be synced")
 	cmd.Flags().StringVar(&targetKubeconfigPath, "target-kubeconfig", "", "path to the kubeconfig for the target cluster")
 	cmd.Flags().IntVar(&maxConcurrentWorkers, "max-concurrent-workers", 10, "number of worker threads for concurrent reconciliation of resources")
+	cmd.Flags().StringVar(&namespace, "namespace", "", "namespace in which the ManagedResources should be observed (defaults to all namespaces)")
 
 	return cmd
 }
