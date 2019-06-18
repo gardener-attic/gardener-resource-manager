@@ -15,6 +15,7 @@
 package managedresources
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -29,6 +30,8 @@ func merge(desired, current *unstructured.Unstructured) error {
 	current.SetFinalizers(currentCopy.GetFinalizers())
 
 	switch current.GroupVersionKind().GroupKind() {
+	case corev1.SchemeGroupVersion.WithKind("Deployment").GroupKind():
+		return mergeDeployment(scheme.Scheme, currentCopy, current)
 	case corev1.SchemeGroupVersion.WithKind("Service").GroupKind():
 		return mergeService(scheme.Scheme, currentCopy, current)
 	case corev1.SchemeGroupVersion.WithKind("ServiceAccount").GroupKind():
@@ -36,6 +39,26 @@ func merge(desired, current *unstructured.Unstructured) error {
 	}
 
 	return nil
+}
+
+func mergeDeployment(scheme *runtime.Scheme, oldObj, newObj runtime.Object) error {
+	oldDeployment := &appsv1.Deployment{}
+	if err := scheme.Convert(oldObj, oldDeployment, nil); err != nil {
+		return err
+	}
+
+	newDeployment := &appsv1.Deployment{}
+	if err := scheme.Convert(newObj, newDeployment, nil); err != nil {
+		return err
+	}
+
+	// We do not want to overwrite a Deployment's `.spec.replicas' if the new deployments `.spec.replicas`
+	// field is unset.
+	if newDeployment.Spec.Replicas == nil {
+		newDeployment.Spec.Replicas = oldDeployment.Spec.Replicas
+	}
+
+	return scheme.Convert(newDeployment, newObj, nil)
 }
 
 func mergeService(scheme *runtime.Scheme, oldObj, newObj runtime.Object) error {
