@@ -26,12 +26,27 @@ metadata:
   namespace: default
 type: Opaque
 data:
-  other-objects.yaml: YXBpVmVyc2lvbjogdjEKa2luZDogU2VydmljZUFjY291bnQKbWV0YWRhdGE6CiAgbmFtZTogdGVzdC01Njc4CiAgbmFtZXNwYWNlOiBkZWZhdWx0Cg==
-    # apiVersion: v1
-    # kind: ServiceAccount
+  other-objects.yaml: YXBpVmVyc2lvbjogYXBwcy92MSAjIGZvciB2ZXJzaW9ucyBiZWZvcmUgMS45LjAgdXNlIGFwcHMvdjFiZXRhMgpraW5kOiBEZXBsb3ltZW50Cm1ldGFkYXRhOgogIG5hbWU6IG5naW54LWRlcGxveW1lbnQKc3BlYzoKICBzZWxlY3RvcjoKICAgIG1hdGNoTGFiZWxzOgogICAgICBhcHA6IG5naW54CiAgcmVwbGljYXM6IDIgIyB0ZWxscyBkZXBsb3ltZW50IHRvIHJ1biAyIHBvZHMgbWF0Y2hpbmcgdGhlIHRlbXBsYXRlCiAgdGVtcGxhdGU6CiAgICBtZXRhZGF0YToKICAgICAgbGFiZWxzOgogICAgICAgIGFwcDogbmdpbngKICAgIHNwZWM6CiAgICAgIGNvbnRhaW5lcnM6CiAgICAgIC0gbmFtZTogbmdpbngKICAgICAgICBpbWFnZTogbmdpbng6MS43LjkKICAgICAgICBwb3J0czoKICAgICAgICAtIGNvbnRhaW5lclBvcnQ6IDgwCg==
+    # apiVersion: apps/v1
+    # kind: Deployment
     # metadata:
-    #   name: test-5678
-    #   namespace: default
+    #   name: nginx-deployment
+    # spec:
+    #   selector:
+    #     matchLabels:
+    #       app: nginx
+    #   replicas: 2 # tells deployment to run 2 pods matching the template
+    #   template:
+    #     metadata:
+    #       labels:
+    #         app: nginx
+    #     spec:
+    #       containers:
+    #       - name: nginx
+    #         image: nginx:1.7.9
+    #         ports:
+    #         - containerPort: 80
+
 ---
 apiVersion: resources.gardener.cloud/v1alpha1
 kind: ManagedResource

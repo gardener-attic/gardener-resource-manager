@@ -171,7 +171,7 @@ func (r *reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logg
 	return ctrl.Result{}, nil
 }
 
-func (r *reconciler) applyNewResources(newResourcesObjects []*unstructured.Unstructured, injectLabels map[string]string) error {
+func (r *reconciler) applyNewResources(newResourcesObjects []*unstructured.Unstructured, labelsToInject map[string]string) error {
 	var (
 		results   = make(chan error)
 		wg        sync.WaitGroup
@@ -197,17 +197,9 @@ func (r *reconciler) applyNewResources(newResourcesObjects []*unstructured.Unstr
 
 			results <- retry.RetryOnConflict(retry.DefaultBackoff, func() (err error) {
 				if err := extensionscontroller.CreateOrUpdate(r.ctx, r.targetClient, current, func() error {
-					if injectLabels != nil {
-						if l := desired.GetLabels(); l == nil {
-							desired.SetLabels(injectLabels)
-						} else {
-							for k, v := range injectLabels {
-								l[k] = v
-							}
-							desired.SetLabels(l)
-						}
+					if err := injectLabels(desired, labelsToInject); err != nil {
+						return err
 					}
-
 					return merge(desired, current)
 				}); err != nil {
 					return fmt.Errorf("error during apply of object %q: %+v", resource, err)
@@ -305,4 +297,51 @@ func objectReferenceToString(o corev1.ObjectReference) string {
 
 func unstructuredToString(o *unstructured.Unstructured) string {
 	return fmt.Sprintf("%s/%s/%s/%s", o.GetAPIVersion(), o.GetKind(), o.GetNamespace(), o.GetName())
+}
+
+func injectLabels(obj *unstructured.Unstructured, labels map[string]string) error {
+	if labels == nil {
+		return nil
+	}
+	if err := unstructured.SetNestedField(obj.Object, mergeLabels(obj.GetLabels(), labels), "metadata", "labels"); err != nil {
+		return err
+	}
+
+	_, found, err := unstructured.NestedMap(obj.Object, "spec", "template")
+	if err != nil {
+		return err
+	}
+	if !found {
+		return nil
+	}
+
+	templateLabels, _, err := unstructured.NestedStringMap(obj.Object, "spec", "template", "metadata", "labels")
+	if err != nil {
+		return err
+	}
+
+	return unstructured.SetNestedField(obj.Object, mergeLabels(templateLabels, labels), "spec", "template", "metadata", "labels")
+}
+
+func mergeLabels(existingLabels, newLabels map[string]string) map[string]interface{} {
+	if existingLabels == nil {
+		return stringMapToInterfaceMap(newLabels)
+	}
+
+	labels := make(map[string]interface{}, len(existingLabels)+len(newLabels))
+	for k, v := range existingLabels {
+		labels[k] = v
+	}
+	for k, v := range newLabels {
+		labels[k] = v
+	}
+	return labels
+}
+
+func stringMapToInterfaceMap(in map[string]string) map[string]interface{} {
+	m := make(map[string]interface{}, len(in))
+	for k, v := range in {
+		m[k] = v
+	}
+	return m
 }
