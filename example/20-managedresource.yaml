@@ -42,3 +42,5 @@ spec:
   secretRefs:
   - name: managedresource-example1
   - name: managedresource-example2
+  injectLabels:
+    foo: bar

@@ -141,7 +141,7 @@ func (r *reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 		return ctrl.Result{}, err
 	}
 
-	if err := r.applyNewResources(newResourcesObjects); err != nil {
+	if err := r.applyNewResources(newResourcesObjects, mr.Spec.InjectLabels); err != nil {
 		log.Error(err, "Could not apply all new resources")
 		return ctrl.Result{}, err
 	}
@@ -171,7 +171,7 @@ func (r *reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logg
 	return ctrl.Result{}, nil
 }
 
-func (r *reconciler) applyNewResources(newResourcesObjects []*unstructured.Unstructured) error {
+func (r *reconciler) applyNewResources(newResourcesObjects []*unstructured.Unstructured, injectLabels map[string]string) error {
 	var (
 		results   = make(chan error)
 		wg        sync.WaitGroup
@@ -197,6 +197,17 @@ func (r *reconciler) applyNewResources(newResourcesObjects []*unstructured.Unstr
 
 			results <- retry.RetryOnConflict(retry.DefaultBackoff, func() (err error) {
 				if err := extensionscontroller.CreateOrUpdate(r.ctx, r.targetClient, current, func() error {
+					if injectLabels != nil {
+						if l := desired.GetLabels(); l == nil {
+							desired.SetLabels(injectLabels)
+						} else {
+							for k, v := range injectLabels {
+								l[k] = v
+							}
+							desired.SetLabels(l)
+						}
+					}
+
 					return merge(desired, current)
 				}); err != nil {
 					return fmt.Errorf("error during apply of object %q: %+v", resource, err)

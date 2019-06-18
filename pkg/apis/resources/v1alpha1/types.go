@@ -48,6 +48,9 @@ type ManagedResourceList struct {
 type ManagedResourceSpec struct {
 	// SecretRefs is a list of secret references.
 	SecretRefs []corev1.LocalObjectReference `json:"secretRefs"`
+	// InjectLabels injects the provided labels into every resource that is part of the referenced secrets.
+	// +optional
+	InjectLabels map[string]string `json:"injectLabels,omitempty"`
 }
 
 // ManagedResourceStatus is the status of a managed resource.

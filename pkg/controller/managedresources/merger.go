@@ -28,6 +28,7 @@ func merge(desired, current *unstructured.Unstructured) error {
 	desired.DeepCopyInto(current)
 	current.SetResourceVersion(currentCopy.GetResourceVersion())
 	current.SetFinalizers(currentCopy.GetFinalizers())
+	current.SetLabels(desired.GetLabels())
 
 	switch current.GroupVersionKind().GroupKind() {
 	case appsv1.SchemeGroupVersion.WithKind("Deployment").GroupKind():

@@ -92,6 +92,13 @@ func (in *ManagedResourceSpec) DeepCopyInto(out *ManagedResourceSpec) {
 		*out = make([]v1.LocalObjectReference, len(*in))
 		copy(*out, *in)
 	}
+	if in.InjectLabels != nil {
+		in, out := &in.InjectLabels, &out.InjectLabels
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	return
 }
 
