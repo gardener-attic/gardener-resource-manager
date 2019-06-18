@@ -30,8 +30,10 @@ func merge(desired, current *unstructured.Unstructured) error {
 	current.SetFinalizers(currentCopy.GetFinalizers())
 
 	switch current.GroupVersionKind().GroupKind() {
-	case corev1.SchemeGroupVersion.WithKind("Deployment").GroupKind():
+	case appsv1.SchemeGroupVersion.WithKind("Deployment").GroupKind():
 		return mergeDeployment(scheme.Scheme, currentCopy, current)
+	case appsv1.SchemeGroupVersion.WithKind("StatefulSet").GroupKind():
+		return mergeStatefulSet(scheme.Scheme, currentCopy, current)
 	case corev1.SchemeGroupVersion.WithKind("Service").GroupKind():
 		return mergeService(scheme.Scheme, currentCopy, current)
 	case corev1.SchemeGroupVersion.WithKind("ServiceAccount").GroupKind():
@@ -59,6 +61,26 @@ func mergeDeployment(scheme *runtime.Scheme, oldObj, newObj runtime.Object) erro
 	}
 
 	return scheme.Convert(newDeployment, newObj, nil)
+}
+
+func mergeStatefulSet(scheme *runtime.Scheme, oldObj, newObj runtime.Object) error {
+	oldStatefulSet := &appsv1.StatefulSet{}
+	if err := scheme.Convert(oldObj, oldStatefulSet, nil); err != nil {
+		return err
+	}
+
+	newStatefulSet := &appsv1.StatefulSet{}
+	if err := scheme.Convert(newObj, newStatefulSet, nil); err != nil {
+		return err
+	}
+
+	// We do not want to overwrite a StatefulSet's `.spec.replicas' if the new deployments `.spec.replicas`
+	// field is unset.
+	if newStatefulSet.Spec.Replicas == nil {
+		newStatefulSet.Spec.Replicas = oldStatefulSet.Spec.Replicas
+	}
+
+	return scheme.Convert(newStatefulSet, newObj, nil)
 }
 
 func mergeService(scheme *runtime.Scheme, oldObj, newObj runtime.Object) error {

@@ -26,6 +26,7 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -183,13 +184,24 @@ func (r *reconciler) applyNewResources(newResourcesObjects []*unstructured.Unstr
 		go func(desired *unstructured.Unstructured) {
 			defer wg.Done()
 
-			current := desired.DeepCopy()
-			r.log.Info("Applying", "resource", unstructuredToString(desired))
+			if desired.GetNamespace() == "" {
+				desired.SetNamespace(metav1.NamespaceDefault)
+			}
+
+			var (
+				current  = desired.DeepCopy()
+				resource = unstructuredToString(desired)
+			)
+
+			r.log.Info("Applying", "resource", resource)
 
 			results <- retry.RetryOnConflict(retry.DefaultBackoff, func() (err error) {
-				return extensionscontroller.CreateOrUpdate(r.ctx, r.targetClient, current, func() error {
+				if err := extensionscontroller.CreateOrUpdate(r.ctx, r.targetClient, current, func() error {
 					return merge(desired, current)
-				})
+				}); err != nil {
+					return fmt.Errorf("error during apply of object %q: %+v", resource, err)
+				}
+				return nil
 			})
 		}(desired)
 	}
