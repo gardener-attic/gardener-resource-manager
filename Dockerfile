@@ -1,5 +1,5 @@
 #############      builder-base                             #############
-FROM golang:1.12.5 AS builder-base
+FROM golang:1.12.6 AS builder-base
 
 COPY ./hack/install-requirements.sh /install-requirements.sh
 COPY ./tools /tools
@@ -17,7 +17,7 @@ COPY . .
 RUN make VERIFY=$VERIFY all
 
 #############      base                                     #############
-FROM alpine:3.8 AS base
+FROM alpine:3.9 AS base
 
 RUN apk add --update bash curl
 

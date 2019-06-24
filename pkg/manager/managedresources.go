@@ -17,24 +17,25 @@ package manager
 import (
 	"context"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
 
-	"github.com/gardener/gardener-extensions/pkg/controller"
-	resourcemanagerv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 type ManagedResource struct {
 	client   client.Client
-	resource resourcemanagerv1alpha1.ManagedResource
+	resource *resourcesv1alpha1.ManagedResource
 }
 
 func NewManagedResource(client client.Client) *ManagedResource {
 	return &ManagedResource{
 		client: client,
-		resource: resourcemanagerv1alpha1.ManagedResource{
-			Spec: resourcemanagerv1alpha1.ManagedResourceSpec{
+		resource: &resourcesv1alpha1.ManagedResource{
+			Spec: resourcesv1alpha1.ManagedResourceSpec{
 				SecretRefs:   []corev1.LocalObjectReference{},
 				InjectLabels: map[string]string{},
 			},
@@ -45,34 +46,39 @@ func NewManagedResource(client client.Client) *ManagedResource {
 func (m *ManagedResource) WithNamespacedName(namespace, name string) *ManagedResource {
 	m.resource.Namespace = namespace
 	m.resource.Name = name
-
 	return m
 }
 
 func (m *ManagedResource) WithSecretRef(secretRefName string) *ManagedResource {
 	m.resource.Spec.SecretRefs = append(m.resource.Spec.SecretRefs, corev1.LocalObjectReference{Name: secretRefName})
-
 	return m
 }
 
 func (m *ManagedResource) WithSecretRefs(secretRefs []corev1.LocalObjectReference) *ManagedResource {
 	m.resource.Spec.SecretRefs = append(m.resource.Spec.SecretRefs, secretRefs...)
-
 	return m
 }
 
 func (m *ManagedResource) WithInjectedLabels(labelsToInject map[string]string) *ManagedResource {
 	m.resource.Spec.InjectLabels = labelsToInject
-
 	return m
 }
 
 func (m *ManagedResource) Reconcile(ctx context.Context) error {
-	return controller.CreateOrUpdate(ctx, m.client, &m.resource, nil)
+	secretRefs := m.resource.Spec.SecretRefs
+	injectLabels := m.resource.Spec.InjectLabels
+
+	_, err := controllerutil.CreateOrUpdate(ctx, m.client, m.resource, func(obj runtime.Object) error {
+		resource := obj.(*resourcesv1alpha1.ManagedResource)
+		resource.Spec.SecretRefs = secretRefs
+		resource.Spec.InjectLabels = injectLabels
+		return nil
+	})
+	return err
 }
 
 func (m *ManagedResource) Delete(ctx context.Context) error {
-	if err := m.client.Delete(ctx, &m.resource); err != nil && !apierrors.IsNotFound(err) {
+	if err := m.client.Delete(ctx, m.resource); err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 	return nil

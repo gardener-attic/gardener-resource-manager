@@ -17,25 +17,25 @@ package manager
 import (
 	"context"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-
-	"github.com/gardener/gardener-extensions/pkg/controller"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 type Secret struct {
 	client client.Client
 
 	keyValues map[string]string
-	secret    corev1.Secret
+	secret    *corev1.Secret
 }
 
 func NewSecret(client client.Client) *Secret {
 	return &Secret{
 		client:    client,
 		keyValues: make(map[string]string),
-		secret: corev1.Secret{
+		secret: &corev1.Secret{
 			Type: corev1.SecretTypeOpaque,
 		},
 	}
@@ -44,22 +44,27 @@ func NewSecret(client client.Client) *Secret {
 func (s *Secret) WithNamespacedName(namespace, name string) *Secret {
 	s.secret.Namespace = namespace
 	s.secret.Name = name
-
 	return s
 }
 
 func (s *Secret) WithKeyValues(keyValues map[string][]byte) *Secret {
 	s.secret.Data = keyValues
-
 	return s
 }
 
 func (s *Secret) Reconcile(ctx context.Context) error {
-	return controller.CreateOrUpdate(ctx, s.client, &s.secret, nil)
+	data := s.secret.Data
+
+	_, err := controllerutil.CreateOrUpdate(ctx, s.client, s.secret, func(obj runtime.Object) error {
+		secret := obj.(*corev1.Secret)
+		secret.Data = data
+		return nil
+	})
+	return err
 }
 
 func (s *Secret) Delete(ctx context.Context) error {
-	if err := s.client.Delete(ctx, &s.secret); err != nil && !apierrors.IsNotFound(err) {
+	if err := s.client.Delete(ctx, s.secret); err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 	return nil
@@ -80,13 +85,11 @@ func NewSecrets(client client.Client) *Secrets {
 
 func (s *Secrets) WithSecretList(secrets []Secret) *Secrets {
 	s.secrets = append(s.secrets, secrets...)
-
 	return s
 }
 
 func (s *Secrets) WithSecret(secrets Secret) *Secrets {
 	s.secrets = append(s.secrets, secrets)
-
 	return s
 }
 

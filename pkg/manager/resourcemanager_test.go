@@ -16,27 +16,19 @@ package manager
 
 import (
 	"context"
-	"testing"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	resourcemanagerv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
-	kutil "github.com/gardener/gardener/pkg/utils/kubernetes"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-
+	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
 	mockclient "github.com/gardener/gardener-resource-manager/pkg/mock/controller-runtime/client"
-	"github.com/golang/mock/gomock"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	kutil "github.com/gardener/gardener/pkg/utils/kubernetes"
+	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-func TestUtil(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Resource Manager Test Suite")
-}
 
 var _ = Describe("Resource Manager", func() {
 	var (
@@ -69,7 +61,7 @@ var _ = Describe("Resource Manager", func() {
 					Name:      secretName,
 					Namespace: secretNamespace,
 				}
-				expectedSecret = corev1.Secret{
+				expectedSecret = &corev1.Secret{
 					ObjectMeta: secretMeta,
 					Data:       secretData,
 					Type:       corev1.SecretTypeOpaque,
@@ -92,6 +84,7 @@ var _ = Describe("Resource Manager", func() {
 			err := managedSecret.Reconcile(ctx)
 			Expect(err).NotTo(HaveOccurred())
 		})
+
 		It("should create a managed resource ", func() {
 			var (
 				managedResourceName      = "foo"
@@ -111,9 +104,9 @@ var _ = Describe("Resource Manager", func() {
 					"shoot.gardener.cloud/no-cleanup": "true",
 				}
 
-				expectedManagedResource = resourcemanagerv1alpha1.ManagedResource{
+				expectedManagedResource = &resourcesv1alpha1.ManagedResource{
 					ObjectMeta: managedResourceMeta,
-					Spec: resourcemanagerv1alpha1.ManagedResourceSpec{
+					Spec: resourcesv1alpha1.ManagedResourceSpec{
 						SecretRefs:   secretRefs,
 						InjectLabels: injectedLabels,
 					},
@@ -123,11 +116,11 @@ var _ = Describe("Resource Manager", func() {
 			managedResource := NewManagedResource(c).WithNamespacedName(managedResourceNamespace, managedResourceName).WithSecretRefs(secretRefs).WithInjectedLabels(injectedLabels)
 			Expect(managedResource.resource).To(Equal(expectedManagedResource))
 
-			c.EXPECT().Get(ctx, kutil.Key(managedResourceNamespace, managedResourceName), gomock.AssignableToTypeOf(&resourcemanagerv1alpha1.ManagedResource{})).DoAndReturn(func(_ context.Context, _ client.ObjectKey, ms *resourcemanagerv1alpha1.ManagedResource) error {
+			c.EXPECT().Get(ctx, kutil.Key(managedResourceNamespace, managedResourceName), gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResource{})).DoAndReturn(func(_ context.Context, _ client.ObjectKey, ms *resourcesv1alpha1.ManagedResource) error {
 				return apierrors.NewNotFound(corev1.Resource("managedresources"), managedResourceName)
 			})
 
-			c.EXPECT().Create(ctx, gomock.AssignableToTypeOf(&resourcemanagerv1alpha1.ManagedResource{})).Do(func(_ context.Context, ms *resourcemanagerv1alpha1.ManagedResource) error {
+			c.EXPECT().Create(ctx, gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResource{})).Do(func(_ context.Context, ms *resourcesv1alpha1.ManagedResource) error {
 				return nil
 			})
 
