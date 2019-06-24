@@ -39,6 +39,10 @@ required = [
   name = "github.com/spf13/cobra"
   version = "0.0.3"
 
+[[constraint]]
+  name = "github.com/golang/mock"
+  version = "1.2.0"
+
 [[override]]
   name = "github.com/go-logr/logr"
   version = "0.1.0"
