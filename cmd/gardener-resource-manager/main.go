@@ -16,10 +16,10 @@ package main
 
 import (
 	"context"
+	"os"
 
 	"github.com/gardener/gardener-resource-manager/cmd/gardener-resource-manager/app"
 
-	controllercmd "github.com/gardener/gardener-extensions/pkg/controller/cmd"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
 )
@@ -36,6 +36,7 @@ func main() {
 	cmd := app.NewControllerManagerCommand(ctx)
 
 	if err := cmd.Execute(); err != nil {
-		controllercmd.LogErrAndExit(err, "error executing the main controller command")
+		log.Log.Error(err, "error executing the main controller command")
+		os.Exit(1)
 	}
 }

@@ -8,32 +8,24 @@ required = [
 ]
 
 [[override]]
-  name = "github.com/gardener/gardener"
-  branch = "gardener-extensions-fixes"
-
-[[override]]
   name = "sigs.k8s.io/controller-runtime"
-  version = "0.1.11"
+  version = "0.2.0-beta.2"
 
 [[override]]
   name = "k8s.io/api"
-  version = "kubernetes-1.13.4"
+  version = "kubernetes-1.14.0"
 
 [[override]]
   name = "k8s.io/apimachinery"
-  version = "kubernetes-1.13.4"
+  version = "kubernetes-1.14.0"
 
 [[override]]
   name = "k8s.io/client-go"
-  version = "kubernetes-1.13.4"
+  version = "kubernetes-1.14.0"
 
 [[override]]
   name = "k8s.io/code-generator"
-  version = "kubernetes-1.13.4"
-
-[[constraint]]
-  name = "github.com/hashicorp/go-multierror"
-  revision = "3d5d8f294aa03d8e98859feac328afbdf1ae0703"
+  version = "kubernetes-1.14.0"
 
 [[constraint]]
   name = "github.com/spf13/cobra"
@@ -46,6 +38,11 @@ required = [
 [[override]]
   name = "github.com/go-logr/logr"
   version = "0.1.0"
+
+[[override]]
+  name = "gopkg.in/fsnotify.v1"
+  source = "https://github.com/fsnotify/fsnotify.git"
+  version="v1.4.7"
 
 # Dependencies for testing purposes only
 

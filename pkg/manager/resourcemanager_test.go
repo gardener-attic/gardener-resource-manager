@@ -20,7 +20,6 @@ import (
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
 	mockclient "github.com/gardener/gardener-resource-manager/pkg/mock/controller-runtime/client"
 
-	kutil "github.com/gardener/gardener/pkg/utils/kubernetes"
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -71,7 +70,7 @@ var _ = Describe("Resource Manager", func() {
 			managedSecret := NewSecret(c).WithNamespacedName(secretNamespace, secretName).WithKeyValues(secretData)
 			Expect(managedSecret.secret).To(Equal(expectedSecret))
 
-			c.EXPECT().Get(ctx, kutil.Key(secretNamespace, secretName), gomock.AssignableToTypeOf(&corev1.Secret{})).DoAndReturn(func(_ context.Context, _ client.ObjectKey, secret *corev1.Secret) error {
+			c.EXPECT().Get(ctx, client.ObjectKey{Namespace: secretNamespace, Name: secretName}, gomock.AssignableToTypeOf(&corev1.Secret{})).DoAndReturn(func(_ context.Context, _ client.ObjectKey, secret *corev1.Secret) error {
 				return apierrors.NewNotFound(corev1.Resource("secrets"), secretName)
 			})
 
@@ -116,7 +115,7 @@ var _ = Describe("Resource Manager", func() {
 			managedResource := NewManagedResource(c).WithNamespacedName(managedResourceNamespace, managedResourceName).WithSecretRefs(secretRefs).WithInjectedLabels(injectedLabels)
 			Expect(managedResource.resource).To(Equal(expectedManagedResource))
 
-			c.EXPECT().Get(ctx, kutil.Key(managedResourceNamespace, managedResourceName), gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResource{})).DoAndReturn(func(_ context.Context, _ client.ObjectKey, ms *resourcesv1alpha1.ManagedResource) error {
+			c.EXPECT().Get(ctx, client.ObjectKey{Namespace: managedResourceNamespace, Name: managedResourceName}, gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResource{})).DoAndReturn(func(_ context.Context, _ client.ObjectKey, ms *resourcesv1alpha1.ManagedResource) error {
 				return apierrors.NewNotFound(corev1.Resource("managedresources"), managedResourceName)
 			})
 

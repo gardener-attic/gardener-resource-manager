@@ -21,7 +21,7 @@ source "$DIRNAME/common.sh"
 
 header_text "Install"
 
-LD_FLAGS="-w -X github.com/gardener/gardener-extensions/pkg/version.Version=$VERSION"
+LD_FLAGS="-w -X github.com/gardener/gardener-resource-manager/pkg/version.Version=$VERSION"
 
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go install -ldflags "$LD_FLAGS" \

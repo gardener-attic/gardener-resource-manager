@@ -21,8 +21,8 @@ import (
 	"sync"
 
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
+	"github.com/gardener/gardener-resource-manager/pkg/controller/utils"
 
-	extensionscontroller "github.com/gardener/gardener-extensions/pkg/controller"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -35,6 +35,7 @@ import (
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -78,7 +79,7 @@ func (r *reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 func (r *reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.Logger) (ctrl.Result, error) {
 	log.Info("Starting to reconcile ManagedResource")
 
-	if err := extensionscontroller.EnsureFinalizer(r.ctx, r.client, FinalizerName, mr); err != nil {
+	if err := utils.EnsureFinalizer(r.ctx, r.client, FinalizerName, mr); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -132,7 +133,7 @@ func (r *reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 		return ctrl.Result{}, err
 	}
 
-	if err := extensionscontroller.TryUpdateStatus(r.ctx, retry.DefaultBackoff, r.client, mr, func() error {
+	if err := utils.TryUpdateStatus(r.ctx, retry.DefaultBackoff, r.client, mr, func() error {
 		mr.Status.ObservedGeneration = mr.Generation
 		mr.Status.Resources = newResourcesObjectReferences
 		return nil
@@ -162,7 +163,7 @@ func (r *reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logg
 		return ctrl.Result{}, err
 	}
 
-	if err := extensionscontroller.DeleteFinalizer(r.ctx, r.client, FinalizerName, mr); err != nil {
+	if err := utils.DeleteFinalizer(r.ctx, r.client, FinalizerName, mr); err != nil {
 		log.Error(err, "Error removing finalizer from ManagedResource")
 		return reconcile.Result{}, err
 	}
@@ -196,7 +197,7 @@ func (r *reconciler) applyNewResources(newResourcesObjects []*unstructured.Unstr
 			r.log.Info("Applying", "resource", resource)
 
 			results <- retry.RetryOnConflict(retry.DefaultBackoff, func() (err error) {
-				if err := extensionscontroller.CreateOrUpdate(r.ctx, r.targetClient, current, func() error {
+				if _, err := controllerutil.CreateOrUpdate(r.ctx, r.targetClient, current, func() error {
 					if err := injectLabels(desired, labelsToInject); err != nil {
 						return err
 					}
