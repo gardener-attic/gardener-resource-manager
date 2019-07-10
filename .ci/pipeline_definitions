@@ -13,7 +13,7 @@ gardener-resource-manager:
             dockerfile: 'Dockerfile'
             target: gardener-resource-manager
     steps: ~
-  variants:
+  jobs:
     head-update:
       traits:
         component_descriptor: ~
