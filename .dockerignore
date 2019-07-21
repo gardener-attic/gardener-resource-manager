@@ -11,3 +11,5 @@
 !VERSION
 !Makefile
 !.gitignore
+!go.mod
+!go.sum

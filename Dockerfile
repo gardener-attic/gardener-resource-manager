@@ -1,10 +1,10 @@
 #############      builder-base                             #############
-FROM golang:1.12.6 AS builder-base
+FROM golang:1.12.7 AS builder-base
 
-COPY ./hack/install-requirements.sh /install-requirements.sh
-COPY ./tools /tools
+WORKDIR /go/src/github.com/gardener/gardener-resource-manager
+COPY . .
 
-RUN /install-requirements.sh
+RUN ./hack/install-requirements.sh
 
 #############      builder                                  #############
 FROM builder-base AS builder
@@ -12,7 +12,6 @@ FROM builder-base AS builder
 ARG VERIFY=true
 
 WORKDIR /go/src/github.com/gardener/gardener-resource-manager
-COPY . .
 
 RUN make VERIFY=$VERIFY all
 

@@ -21,4 +21,8 @@ source "$DIRNAME/common.sh"
 
 header_text "Format"
 
-go fmt "${SOURCE_TREES[@]}"
+# go fmt ignores -mod=vendor and performs module lookup (https://github.com/golang/go/issues/27841).
+# Also go fmt is just alias for gofmt -l -w and does not support flags that gofmt does.
+# That is why gofmt is used.
+
+gofmt -s -l -w ./cmd ./pkg
