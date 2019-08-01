@@ -63,7 +63,6 @@ var _ = Describe("Resource Manager", func() {
 				expectedSecret = &corev1.Secret{
 					ObjectMeta: secretMeta,
 					Data:       secretData,
-					Type:       corev1.SecretTypeOpaque,
 				}
 			)
 
