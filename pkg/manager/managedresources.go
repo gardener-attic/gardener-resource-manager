@@ -32,13 +32,8 @@ type ManagedResource struct {
 
 func NewManagedResource(client client.Client) *ManagedResource {
 	return &ManagedResource{
-		client: client,
-		resource: &resourcesv1alpha1.ManagedResource{
-			Spec: resourcesv1alpha1.ManagedResourceSpec{
-				SecretRefs:   []corev1.LocalObjectReference{},
-				InjectLabels: map[string]string{},
-			},
-		},
+		client:   client,
+		resource: &resourcesv1alpha1.ManagedResource{},
 	}
 }
 
