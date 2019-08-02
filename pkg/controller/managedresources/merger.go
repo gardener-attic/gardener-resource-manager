@@ -22,13 +22,22 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-func merge(desired, current *unstructured.Unstructured) error {
+func merge(desired, current *unstructured.Unstructured, forceOverwriteLabels bool, existingLabels map[string]string, forceOverwriteAnnotations bool, existingAnnotations map[string]string) error {
 	currentCopy := current.DeepCopy()
 
 	desired.DeepCopyInto(current)
 	current.SetResourceVersion(currentCopy.GetResourceVersion())
 	current.SetFinalizers(currentCopy.GetFinalizers())
-	current.SetLabels(desired.GetLabels())
+	if forceOverwriteLabels {
+		current.SetLabels(desired.GetLabels())
+	} else {
+		current.SetLabels(mergeMapsBasedOnOldMap(desired.GetLabels(), currentCopy.GetLabels(), existingLabels))
+	}
+	if forceOverwriteAnnotations {
+		current.SetAnnotations(desired.GetAnnotations())
+	} else {
+		current.SetAnnotations(mergeMapsBasedOnOldMap(desired.GetAnnotations(), currentCopy.GetAnnotations(), existingAnnotations))
+	}
 
 	switch current.GroupVersionKind().GroupKind() {
 	case appsv1.SchemeGroupVersion.WithKind("Deployment").GroupKind():
@@ -131,4 +140,24 @@ func mergeServiceAccount(scheme *runtime.Scheme, oldObj, newObj runtime.Object) 
 	newServiceAccount.ImagePullSecrets = oldServiceAccount.ImagePullSecrets
 
 	return scheme.Convert(newServiceAccount, newObj, nil)
+}
+
+func mergeMapsBasedOnOldMap(desired, current, old map[string]string) map[string]string {
+	out := map[string]string{}
+	for k, v := range desired {
+		out[k] = v
+	}
+
+	for k, v := range current {
+		oldValue, ok := old[k]
+		desiredValue, ok2 := desired[k]
+
+		if ok && oldValue == v && (!ok2 || desiredValue != v) {
+			continue
+		}
+
+		out[k] = v
+	}
+
+	return out
 }

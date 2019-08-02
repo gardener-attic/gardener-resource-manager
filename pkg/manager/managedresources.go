@@ -58,12 +58,24 @@ func (m *ManagedResource) WithInjectedLabels(labelsToInject map[string]string) *
 	return m
 }
 
+func (m *ManagedResource) ForceOverwriteAnnotations(v bool) *ManagedResource {
+	m.resource.Spec.ForceOverwriteAnnotations = &v
+	return m
+}
+
+func (m *ManagedResource) ForceOverwriteLabels(v bool) *ManagedResource {
+	m.resource.Spec.ForceOverwriteLabels = &v
+	return m
+}
+
 func (m *ManagedResource) Reconcile(ctx context.Context) error {
 	resource := &resourcesv1alpha1.ManagedResource{ObjectMeta: m.resource.ObjectMeta}
 
 	_, err := controllerutil.CreateOrUpdate(ctx, m.client, resource, func() error {
 		resource.Spec.SecretRefs = m.resource.Spec.SecretRefs
 		resource.Spec.InjectLabels = m.resource.Spec.InjectLabels
+		resource.Spec.ForceOverwriteAnnotations = m.resource.Spec.ForceOverwriteAnnotations
+		resource.Spec.ForceOverwriteLabels = m.resource.Spec.ForceOverwriteLabels
 		return nil
 	})
 	return err

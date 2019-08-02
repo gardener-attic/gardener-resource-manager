@@ -84,10 +84,22 @@ func (r *reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 	}
 
 	var (
-		newResourcesObjects          []*unstructured.Unstructured
-		newResourcesObjectReferences []corev1.ObjectReference
+		newResourcesObjects          []object
+		newResourcesObjectReferences []resourcesv1alpha1.ObjectReference
 		newResourcesSet              = sets.NewString()
+
+		existingResourcesIndex = indexResources(mr.Status.Resources)
+
+		forceOverwriteLabels      bool
+		forceOverwriteAnnotations bool
 	)
+
+	if v := mr.Spec.ForceOverwriteLabels; v != nil {
+		forceOverwriteLabels = *v
+	}
+	if v := mr.Spec.ForceOverwriteAnnotations; v != nil {
+		forceOverwriteAnnotations = *v
+	}
 
 	for _, ref := range mr.Spec.SecretRefs {
 		secret := &corev1.Secret{}
@@ -107,15 +119,25 @@ func (r *reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 					continue
 				}
 
-				newObj := &unstructured.Unstructured{Object: decodedObj}
-				decodedObj = nil
+				var (
+					newObj = object{
+						obj:                       &unstructured.Unstructured{Object: decodedObj},
+						forceOverwriteLabels:      forceOverwriteLabels,
+						forceOverwriteAnnotations: forceOverwriteAnnotations,
+					}
+					objectReference = resourcesv1alpha1.ObjectReference{
+						ObjectReference: corev1.ObjectReference{
+							APIVersion: newObj.obj.GetAPIVersion(),
+							Kind:       newObj.obj.GetKind(),
+							Name:       newObj.obj.GetName(),
+							Namespace:  newObj.obj.GetNamespace(),
+						},
+						Labels: mergeMaps(newObj.obj.GetLabels(), mr.Spec.InjectLabels),
+					}
+				)
 
-				objectReference := corev1.ObjectReference{
-					APIVersion: newObj.GetAPIVersion(),
-					Kind:       newObj.GetKind(),
-					Name:       newObj.GetName(),
-					Namespace:  newObj.GetNamespace(),
-				}
+				newObj.oldInformation = existingResourcesIndex[objectReferenceToString(objectReference)]
+				decodedObj = nil
 
 				newResourcesObjects = append(newResourcesObjects, newObj)
 				newResourcesObjectReferences = append(newResourcesObjectReferences, objectReference)
@@ -172,42 +194,42 @@ func (r *reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logg
 	return ctrl.Result{}, nil
 }
 
-func (r *reconciler) applyNewResources(newResourcesObjects []*unstructured.Unstructured, labelsToInject map[string]string) error {
+func (r *reconciler) applyNewResources(newResourcesObjects []object, labelsToInject map[string]string) error {
 	var (
 		results   = make(chan error)
 		wg        sync.WaitGroup
 		errorList = []error{}
 	)
 
-	for _, desired := range newResourcesObjects {
+	for _, o := range newResourcesObjects {
 		wg.Add(1)
 
-		go func(desired *unstructured.Unstructured) {
+		go func(obj object) {
 			defer wg.Done()
 
-			if desired.GetNamespace() == "" {
-				desired.SetNamespace(metav1.NamespaceDefault)
+			if obj.obj.GetKind() != "Namespace" && obj.obj.GetNamespace() == "" {
+				obj.obj.SetNamespace(metav1.NamespaceDefault)
 			}
 
 			var (
-				current  = desired.DeepCopy()
-				resource = unstructuredToString(desired)
+				current  = obj.obj.DeepCopy()
+				resource = unstructuredToString(obj.obj)
 			)
 
 			r.log.Info("Applying", "resource", resource)
 
 			results <- retry.RetryOnConflict(retry.DefaultBackoff, func() (err error) {
 				if _, err := controllerutil.CreateOrUpdate(r.ctx, r.targetClient, current, func() error {
-					if err := injectLabels(desired, labelsToInject); err != nil {
+					if err := injectLabels(obj.obj, labelsToInject); err != nil {
 						return err
 					}
-					return merge(desired, current)
+					return merge(obj.obj, current, obj.forceOverwriteLabels, obj.oldInformation.Labels, obj.forceOverwriteAnnotations, obj.oldInformation.Annotations)
 				}); err != nil {
 					return fmt.Errorf("error during apply of object %q: %+v", resource, err)
 				}
 				return nil
 			})
-		}(desired)
+		}(o)
 	}
 
 	go func() {
@@ -247,7 +269,7 @@ func (r *reconciler) cleanOldResources(mr *resourcesv1alpha1.ManagedResource, ne
 		if !newResourcesSet.Has(resource) {
 			wg.Add(1)
 
-			go func(ref corev1.ObjectReference) {
+			go func(ref resourcesv1alpha1.ObjectReference) {
 				defer wg.Done()
 
 				obj := &unstructured.Unstructured{}
@@ -292,7 +314,7 @@ func (r *reconciler) cleanOldResources(mr *resourcesv1alpha1.ManagedResource, ne
 	return false, nil
 }
 
-func objectReferenceToString(o corev1.ObjectReference) string {
+func objectReferenceToString(o resourcesv1alpha1.ObjectReference) string {
 	return fmt.Sprintf("%s/%s/%s/%s", o.APIVersion, o.Kind, o.Namespace, o.Name)
 }
 
@@ -345,4 +367,32 @@ func stringMapToInterfaceMap(in map[string]string) map[string]interface{} {
 		m[k] = v
 	}
 	return m
+}
+
+func mergeMaps(one, two map[string]string) map[string]string {
+	out := make(map[string]string, len(one)+len(two))
+	for k, v := range one {
+		out[k] = v
+	}
+	for k, v := range two {
+		out[k] = v
+	}
+	return out
+}
+
+func indexResources(resources []resourcesv1alpha1.ObjectReference) map[string]resourcesv1alpha1.ObjectReference {
+	out := make(map[string]resourcesv1alpha1.ObjectReference, len(resources))
+
+	for _, r := range resources {
+		out[objectReferenceToString(r)] = r
+	}
+
+	return out
+}
+
+type object struct {
+	obj                       *unstructured.Unstructured
+	oldInformation            resourcesv1alpha1.ObjectReference
+	forceOverwriteLabels      bool
+	forceOverwriteAnnotations bool
 }
