@@ -68,6 +68,11 @@ func (m *ManagedResource) ForceOverwriteLabels(v bool) *ManagedResource {
 	return m
 }
 
+func (m *ManagedResource) KeepObjects(v bool) *ManagedResource {
+	m.resource.Spec.KeepObjects = &v
+	return m
+}
+
 func (m *ManagedResource) Reconcile(ctx context.Context) error {
 	resource := &resourcesv1alpha1.ManagedResource{ObjectMeta: m.resource.ObjectMeta}
 
@@ -76,6 +81,7 @@ func (m *ManagedResource) Reconcile(ctx context.Context) error {
 		resource.Spec.InjectLabels = m.resource.Spec.InjectLabels
 		resource.Spec.ForceOverwriteAnnotations = m.resource.Spec.ForceOverwriteAnnotations
 		resource.Spec.ForceOverwriteLabels = m.resource.Spec.ForceOverwriteLabels
+		resource.Spec.KeepObjects = m.resource.Spec.KeepObjects
 		return nil
 	})
 	return err

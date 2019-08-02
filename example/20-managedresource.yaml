@@ -57,7 +57,8 @@ spec:
   secretRefs:
   - name: managedresource-example1
   - name: managedresource-example2
-  injectLabels:
-    foo: bar
-  forceOverwriteLabels: false
-  forceOverwriteAnnotations: false
+# injectLabels:
+#   foo: bar
+# forceOverwriteLabels: false
+# forceOverwriteAnnotations: false
+# keepObjects: false

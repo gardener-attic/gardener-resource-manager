@@ -108,6 +108,11 @@ func (in *ManagedResourceSpec) DeepCopyInto(out *ManagedResourceSpec) {
 		*out = new(bool)
 		**out = **in
 	}
+	if in.KeepObjects != nil {
+		in, out := &in.KeepObjects, &out.KeepObjects
+		*out = new(bool)
+		**out = **in
+	}
 	return
 }
 

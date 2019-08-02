@@ -176,13 +176,17 @@ func (r *reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 func (r *reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logger) (ctrl.Result, error) {
 	log.Info("Starting to delete ManagedResource")
 
-	if deletionPending, err := r.cleanOldResources(mr, sets.NewString()); err != nil {
-		if deletionPending {
-			log.Error(err, "Deletion is still pending")
-		} else {
-			log.Error(err, "Deletion of all resources failed")
+	if keepObjects := mr.Spec.KeepObjects; keepObjects == nil || !*keepObjects {
+		if deletionPending, err := r.cleanOldResources(mr, sets.NewString()); err != nil {
+			if deletionPending {
+				log.Error(err, "Deletion is still pending")
+			} else {
+				log.Error(err, "Deletion of all resources failed")
+			}
+			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, err
+	} else {
+		log.Info(fmt.Sprintf("Do not delete any resources of %s because .spec.keepObjects=true", mr.Name))
 	}
 
 	if err := utils.DeleteFinalizer(r.ctx, r.client, FinalizerName, mr); err != nil {

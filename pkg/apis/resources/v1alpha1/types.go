@@ -56,6 +56,10 @@ type ManagedResourceSpec struct {
 	// ForceOverwriteAnnotations specifies that all existing annotations should be overwritten. Defaults to false.
 	// +optional
 	ForceOverwriteAnnotations *bool `json:"forceOverwriteAnnotations,omitempty"`
+	// KeepObjects specifies whether the objects should be kept although the managed resource has already been deleted.
+	// Defaults to false.
+	// +optional
+	KeepObjects *bool `json:"keepObjects,omitempty"`
 }
 
 // ManagedResourceStatus is the status of a managed resource.
