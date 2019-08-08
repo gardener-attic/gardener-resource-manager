@@ -16,3 +16,5 @@ TODO
 
 # Packr generated files
 *-packr.go
+
+/controller

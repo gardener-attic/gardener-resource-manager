@@ -176,3 +176,11 @@ func exponentialBackoff(ctx context.Context, backoff wait.Backoff, condition wai
 
 	return wait.ErrWaitTimeout
 }
+
+func GetAnnotation(o metav1.Object, name string) string {
+	annos := o.GetAnnotations()
+	if annos == nil {
+		return ""
+	}
+	return annos[name]
+}
