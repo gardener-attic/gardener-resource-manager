@@ -70,7 +70,8 @@ docker-image:
 
 .PHONY: revendor
 revendor:
-	@dep ensure
+	@GO111MODULE=on go mod vendor
+	@GO111MODULE=on go mod tidy
 
 .PHONY: start
 start:
