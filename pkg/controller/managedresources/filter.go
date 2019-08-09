@@ -18,22 +18,16 @@
 package managedresources
 
 import (
+	"github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"strings"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-// AnnotationClass is used to annotate a resource class
-const AnnotationClass = "resources.gardener.cloud/class"
-
 // DefaultClass is used a resource class is no class is specified on the command line
 const DefaultClass = "resources"
-
-// NoClass indicates no specfied class for the recover mode
-const NoResourceClass = "-"
 
 // ClassFilter keeps the resource class for the actual controller instance
 // and is used as Filter predicate for events finally passed to the controller
@@ -72,11 +66,11 @@ func (f *ClassFilter) FinalizerName() string {
 }
 
 // Responsible checks whether an object should be managed by the actual controller instance
-func (f *ClassFilter) Responsible(o metav1.Object) bool {
+func (f *ClassFilter) Responsible(o runtime.Object) bool {
+	r := o.(*v1alpha1.ManagedResource)
 	c := ""
-	annos := o.GetAnnotations()
-	if annos != nil {
-		c = annos[AnnotationClass]
+	if r.Spec.Class != nil && *r.Spec.Class != "" {
+		c = *r.Spec.Class
 	}
 	return c == f.resourceClass || (c == "" && f.resourceClass == DefaultClass)
 }
@@ -85,11 +79,12 @@ func (f *ClassFilter) Responsible(o metav1.Object) bool {
 // instance. This is split into two conditions. An object must be handled
 // if it has already been handled, indicated by the actual finalizer, or
 // if the actual controller is responsible for the object.
-func (f *ClassFilter) Active(o metav1.Object) (action bool, responsible bool) {
+func (f *ClassFilter) Active(o runtime.Object) (action bool, responsible bool) {
 	busy := false
 	responsible = f.Responsible(o)
+	r := o.(*v1alpha1.ManagedResource)
 
-	for _, finalizer := range o.GetFinalizers() {
+	for _, finalizer := range r.GetFinalizers() {
 		if strings.HasPrefix(finalizer, FinalizerName) {
 			busy = true
 			if finalizer == f.finalizer {
@@ -103,21 +98,21 @@ func (f *ClassFilter) Active(o metav1.Object) (action bool, responsible bool) {
 }
 
 func (f *ClassFilter) Create(e event.CreateEvent) bool {
-	a, r := f.Active(e.Meta)
+	a, r := f.Active(e.Object)
 	return a || r
 }
 
 func (f *ClassFilter) Delete(e event.DeleteEvent) bool {
-	a, r := f.Active(e.Meta)
+	a, r := f.Active(e.Object)
 	return a || r
 }
 
 func (f *ClassFilter) Update(e event.UpdateEvent) bool {
-	a, r := f.Active(e.MetaNew)
+	a, r := f.Active(e.ObjectNew)
 	return a || r
 }
 
 func (f *ClassFilter) Generic(e event.GenericEvent) bool {
-	a, r := f.Active(e.Meta)
+	a, r := f.Active(e.Object)
 	return a || r
 }

@@ -15,17 +15,13 @@
 package managedresources
 
 import (
-	"github.com/gardener/gardener-resource-manager/pkg/controller/utils"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 var generationChangedPredicate = predicate.Funcs{
 	UpdateFunc: func(e event.UpdateEvent) bool {
-		if e.MetaOld.GetGeneration() != e.MetaNew.GetGeneration() {
-			return true
-		}
-		return utils.GetAnnotation(e.MetaOld, AnnotationClass) != utils.GetAnnotation(e.MetaNew, AnnotationClass)
+		return e.MetaOld.GetGeneration() != e.MetaNew.GetGeneration()
 	},
 }
 

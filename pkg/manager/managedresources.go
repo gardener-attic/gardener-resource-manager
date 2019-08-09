@@ -43,6 +43,15 @@ func (m *ManagedResource) WithNamespacedName(namespace, name string) *ManagedRes
 	return m
 }
 
+func (m *ManagedResource) WithClassName(name string) *ManagedResource {
+	if name == "" {
+		m.resource.Spec.Class = nil
+	} else {
+		m.resource.Spec.Class = &name
+	}
+	return m
+}
+
 func (m *ManagedResource) WithSecretRef(secretRefName string) *ManagedResource {
 	m.resource.Spec.SecretRefs = append(m.resource.Spec.SecretRefs, corev1.LocalObjectReference{Name: secretRefName})
 	return m
