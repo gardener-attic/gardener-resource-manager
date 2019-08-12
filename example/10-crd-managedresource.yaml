@@ -18,6 +18,9 @@ spec:
     shortNames:
     - mr
   additionalPrinterColumns:
+  - name: Class
+    type: string
+    JSONPath: .spec.class
   - name: Age
     type: date
     JSONPath: .metadata.creationTimestamp
