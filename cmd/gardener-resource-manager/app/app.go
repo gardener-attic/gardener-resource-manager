@@ -53,6 +53,7 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 		targetKubeconfigPath    string
 		maxConcurrentWorkers    int
 		namespace               string
+		resourceClass           string
 	)
 
 	cmd := &cobra.Command{
@@ -79,6 +80,10 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 				os.Exit(1)
 			}
 
+			if resourceClass == "" {
+				resourceClass = managedresources.DefaultClass
+			}
+			filter := managedresources.NewClassFilter(resourceClass)
 			c, err := controller.New("resource-controller", mgr, controller.Options{
 				MaxConcurrentReconciles: maxConcurrentWorkers,
 				Reconciler: managedresources.NewReconciler(
@@ -87,6 +92,7 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 					mgr.GetScheme(),
 					mgr.GetClient(),
 					targetClient,
+					filter,
 				),
 			})
 			if err != nil {
@@ -97,14 +103,14 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 			if err := c.Watch(
 				&source.Kind{Type: &resourcesv1alpha1.ManagedResource{}},
 				&handler.EnqueueRequestForObject{},
-				managedresources.GenerationChangedPredicate(),
+				filter, managedresources.GenerationChangedPredicate(),
 			); err != nil {
 				entryLog.Error(err, "unable to watch ManagedResources")
 				os.Exit(1)
 			}
 			if err := c.Watch(
 				&source.Kind{Type: &corev1.Secret{}},
-				&handler.EnqueueRequestsFromMapFunc{ToRequests: managedresources.SecretToManagedResourceMapper(mgr.GetClient(), nil)},
+				&handler.EnqueueRequestsFromMapFunc{ToRequests: managedresources.SecretToManagedResourceMapper(mgr.GetClient(), filter)},
 			); err != nil {
 				entryLog.Error(err, "unable to watch Secrets mapping to ManagedResources")
 				os.Exit(1)
@@ -112,6 +118,7 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 
 			entryLog.Info("Managed namespace: " + namespace)
 			entryLog.Info("Sync period: " + syncPeriod.String())
+			entryLog.Info("Resource class: " + filter.ResourceClass())
 
 			if err := mgr.Start(ctx.Done()); err != nil {
 				entryLog.Error(err, "error running manager")
@@ -126,6 +133,7 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 	cmd.Flags().StringVar(&targetKubeconfigPath, "target-kubeconfig", "", "path to the kubeconfig for the target cluster")
 	cmd.Flags().IntVar(&maxConcurrentWorkers, "max-concurrent-workers", 10, "number of worker threads for concurrent reconciliation of resources")
 	cmd.Flags().StringVar(&namespace, "namespace", "", "namespace in which the ManagedResources should be observed (defaults to all namespaces)")
+	cmd.Flags().StringVar(&resourceClass, "resource-class", managedresources.DefaultClass, "resource class used to filter resource resources")
 
 	return cmd
 }

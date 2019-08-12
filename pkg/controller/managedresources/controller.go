@@ -39,7 +39,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// FinalizerName is the finalizer name that is injected into ManagedResources.
+// FinalizerName is the finalizer base name that is injected into ManagedResources.
+// The concrete finalizer is finally componed by this base name and the resource class.
 const FinalizerName = "resources.gardener.cloud/gardener-resource-manager"
 
 type reconciler struct {
@@ -50,11 +51,13 @@ type reconciler struct {
 	client client.Client
 
 	targetClient client.Client
+
+	class *ClassFilter
 }
 
 // NewReconciler creates a new reconciler with the given target client.
-func NewReconciler(ctx context.Context, log logr.Logger, scheme *runtime.Scheme, c, targetClient client.Client) *reconciler {
-	return &reconciler{ctx, log, scheme, c, targetClient}
+func NewReconciler(ctx context.Context, log logr.Logger, scheme *runtime.Scheme, c, targetClient client.Client, rescClass *ClassFilter) *reconciler {
+	return &reconciler{ctx, log, scheme, c, targetClient, rescClass}
 }
 
 func (r *reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
@@ -70,8 +73,20 @@ func (r *reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return reconcile.Result{}, err
 	}
 
-	if mr.DeletionTimestamp != nil {
+	action, resp := r.class.Active(mr)
+	log.Info(fmt.Sprintf("reconcile: action required: %t, responsible: %t\n", action, resp))
+
+	// if the object should be deleted or the responsibility changed
+	// the actual deployments have to be deleted
+	if mr.DeletionTimestamp != nil || (action && !resp) {
 		return r.delete(mr, log)
+	}
+
+	// if the deletion after a change of responsibility is still
+	// pending, the handling of the object by the responsible controller
+	// must be delayed, until the deletion is finished.
+	if resp && !action {
+		return ctrl.Result{Requeue: true}, nil
 	}
 	return r.reconcile(mr, log)
 }
@@ -79,7 +94,7 @@ func (r *reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 func (r *reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.Logger) (ctrl.Result, error) {
 	log.Info("Starting to reconcile ManagedResource")
 
-	if err := utils.EnsureFinalizer(r.ctx, r.client, FinalizerName, mr); err != nil {
+	if err := utils.EnsureFinalizer(r.ctx, r.client, r.class.FinalizerName(), mr); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -189,7 +204,7 @@ func (r *reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logg
 		log.Info(fmt.Sprintf("Do not delete any resources of %s because .spec.keepObjects=true", mr.Name))
 	}
 
-	if err := utils.DeleteFinalizer(r.ctx, r.client, FinalizerName, mr); err != nil {
+	if err := utils.DeleteFinalizer(r.ctx, r.client, r.class.FinalizerName(), mr); err != nil {
 		log.Error(err, "Error removing finalizer from ManagedResource")
 		return reconcile.Result{}, err
 	}

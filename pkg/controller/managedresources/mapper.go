@@ -70,6 +70,6 @@ func (m *secretToManagedResourceMapper) Map(obj handler.MapObject) []reconcile.R
 
 // SecretToManagedResourceMapper returns a mapper that returns requests for ManagedResources whose
 // referenced secrets have been modified.
-func SecretToManagedResourceMapper(client client.Client, predicates []predicate.Predicate) handler.Mapper {
+func SecretToManagedResourceMapper(client client.Client, predicates ...predicate.Predicate) handler.Mapper {
 	return &secretToManagedResourceMapper{client, predicates}
 }
