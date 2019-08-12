@@ -43,7 +43,7 @@ func (m *ManagedResource) WithNamespacedName(namespace, name string) *ManagedRes
 	return m
 }
 
-func (m *ManagedResource) WithClassName(name string) *ManagedResource {
+func (m *ManagedResource) WithClass(name string) *ManagedResource {
 	if name == "" {
 		m.resource.Spec.Class = nil
 	} else {

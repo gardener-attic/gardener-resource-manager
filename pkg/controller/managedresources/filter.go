@@ -18,9 +18,10 @@
 package managedresources
 
 import (
+	"strings"
+
 	"github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"strings"
 
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -39,6 +40,7 @@ type ClassFilter struct {
 
 var _ predicate.Predicate = &ClassFilter{}
 
+// NewClassFilter returns a new `ClassFilter` instance.
 func NewClassFilter(class string) *ClassFilter {
 	if class == "" {
 		class = DefaultClass
@@ -97,21 +99,25 @@ func (f *ClassFilter) Active(o runtime.Object) (action bool, responsible bool) {
 	return
 }
 
+// Create implements `predicate.Predicate`.
 func (f *ClassFilter) Create(e event.CreateEvent) bool {
 	a, r := f.Active(e.Object)
 	return a || r
 }
 
+// Delete implements `predicate.Predicate`.
 func (f *ClassFilter) Delete(e event.DeleteEvent) bool {
 	a, r := f.Active(e.Object)
 	return a || r
 }
 
+// Update implements `predicate.Predicate`.
 func (f *ClassFilter) Update(e event.UpdateEvent) bool {
 	a, r := f.Active(e.ObjectNew)
 	return a || r
 }
 
+// Generic implements `predicate.Predicate`.
 func (f *ClassFilter) Generic(e event.GenericEvent) bool {
 	a, r := f.Active(e.Object)
 	return a || r
