@@ -43,7 +43,8 @@ import (
 // The concrete finalizer is finally componed by this base name and the resource class.
 const FinalizerName = "resources.gardener.cloud/gardener-resource-manager"
 
-type reconciler struct {
+// Reconciler contains information in order to reconcile instances of ManagedResource.
+type Reconciler struct {
 	ctx context.Context
 	log logr.Logger
 
@@ -56,11 +57,12 @@ type reconciler struct {
 }
 
 // NewReconciler creates a new reconciler with the given target client.
-func NewReconciler(ctx context.Context, log logr.Logger, scheme *runtime.Scheme, c, targetClient client.Client, rescClass *ClassFilter) *reconciler {
-	return &reconciler{ctx, log, scheme, c, targetClient, rescClass}
+func NewReconciler(ctx context.Context, log logr.Logger, scheme *runtime.Scheme, c, targetClient client.Client, rescClass *ClassFilter) *Reconciler {
+	return &Reconciler{ctx, log, scheme, c, targetClient, rescClass}
 }
 
-func (r *reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+// Reconcile implements `reconcile.Reconciler`.
+func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	log := r.log.WithValues("object", req)
 
 	mr := &resourcesv1alpha1.ManagedResource{}
@@ -91,7 +93,7 @@ func (r *reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return r.reconcile(mr, log)
 }
 
-func (r *reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.Logger) (ctrl.Result, error) {
+func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.Logger) (ctrl.Result, error) {
 	log.Info("Starting to reconcile ManagedResource")
 
 	if err := utils.EnsureFinalizer(r.ctx, r.client, r.class.FinalizerName(), mr); err != nil {
@@ -193,7 +195,7 @@ func (r *reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 	return ctrl.Result{}, nil
 }
 
-func (r *reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logger) (ctrl.Result, error) {
+func (r *Reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logger) (ctrl.Result, error) {
 	log.Info("Starting to delete ManagedResource")
 
 	if keepObjects := mr.Spec.KeepObjects; keepObjects == nil || !*keepObjects {
@@ -218,7 +220,7 @@ func (r *reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logg
 	return ctrl.Result{}, nil
 }
 
-func (r *reconciler) applyNewResources(newResourcesObjects []object, labelsToInject map[string]string) error {
+func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInject map[string]string) error {
 	var (
 		results   = make(chan error)
 		wg        sync.WaitGroup
@@ -270,7 +272,7 @@ func (r *reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 	return nil
 }
 
-func (r *reconciler) cleanOldResources(mr *resourcesv1alpha1.ManagedResource, newResourcesSet sets.String) (bool, error) {
+func (r *Reconciler) cleanOldResources(mr *resourcesv1alpha1.ManagedResource, newResourcesSet sets.String) (bool, error) {
 	type output struct {
 		resource        string
 		deletionPending bool

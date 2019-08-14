@@ -85,6 +85,7 @@ github.com/onsi/ginkgo/ginkgo/watch
 github.com/onsi/ginkgo/reporters/stenographer/support/go-colorable
 github.com/onsi/ginkgo/types
 github.com/onsi/ginkgo
+github.com/onsi/ginkgo/extensions/table
 github.com/onsi/ginkgo/internal/remote
 github.com/onsi/ginkgo/reporters/stenographer
 github.com/onsi/ginkgo/reporters/stenographer/support/go-isatty
