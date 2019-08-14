@@ -76,6 +76,7 @@ revendor:
 .PHONY: start
 start:
 	@go run \
+	    -mod=vendor \
 		-ldflags $(LD_FLAGS) \
 		./cmd/gardener-resource-manager \
 	  --leader-election=false \

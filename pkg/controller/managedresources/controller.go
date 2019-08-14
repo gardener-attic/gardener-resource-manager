@@ -134,9 +134,14 @@ func (r *reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 					continue
 				}
 
+				obj := &unstructured.Unstructured{Object: decodedObj}
+				if obj.GetKind() != "Namespace" && obj.GetNamespace() == "" {
+					obj.SetNamespace(metav1.NamespaceDefault)
+				}
+
 				var (
 					newObj = object{
-						obj:                       &unstructured.Unstructured{Object: decodedObj},
+						obj:                       obj,
 						forceOverwriteLabels:      forceOverwriteLabels,
 						forceOverwriteAnnotations: forceOverwriteAnnotations,
 					}
@@ -225,10 +230,6 @@ func (r *reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 
 		go func(obj object) {
 			defer wg.Done()
-
-			if obj.obj.GetKind() != "Namespace" && obj.obj.GetNamespace() == "" {
-				obj.obj.SetNamespace(metav1.NamespaceDefault)
-			}
 
 			var (
 				current  = obj.obj.DeepCopy()
