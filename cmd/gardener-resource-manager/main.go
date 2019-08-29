@@ -19,13 +19,14 @@ import (
 	"os"
 
 	"github.com/gardener/gardener-resource-manager/cmd/gardener-resource-manager/app"
+	"github.com/gardener/gardener-resource-manager/pkg/log"
 
-	"sigs.k8s.io/controller-runtime/pkg/runtime/log"
+	runtimelog "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
 )
 
 func main() {
-	log.SetLogger(log.ZapLogger(false))
+	runtimelog.SetLogger(log.ZapLogger(false))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
@@ -36,7 +37,7 @@ func main() {
 	cmd := app.NewControllerManagerCommand(ctx)
 
 	if err := cmd.Execute(); err != nil {
-		log.Log.Error(err, "error executing the main controller command")
+		runtimelog.Log.Error(err, "error executing the main controller command")
 		os.Exit(1)
 	}
 }
