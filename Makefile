@@ -75,10 +75,12 @@ revendor:
 
 .PHONY: start
 start:
-	@go run \
+	@GO111MODULE=on go run \
 	    -mod=vendor \
 		-ldflags $(LD_FLAGS) \
 		./cmd/gardener-resource-manager \
 	  --leader-election=false \
 	  --sync-period=60s \
-	  --max-concurrent-workers=10
+	  --max-concurrent-workers=10 \
+	  --health-sync-period=60s \
+	  --health-max-concurrent-workers=10

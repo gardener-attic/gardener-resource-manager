@@ -26,6 +26,7 @@ var generationChangedPredicate = predicate.Funcs{
 }
 
 // GenerationChangedPredicate is a predicate for generation changes.
+// TODO: Adopt https://github.com/kubernetes-sigs/controller-runtime/pull/553 when upgrading controller-runtime
 func GenerationChangedPredicate() predicate.Predicate {
 	return generationChangedPredicate
 }
