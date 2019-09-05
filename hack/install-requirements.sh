@@ -18,10 +18,13 @@ set -e
 DIRNAME="$(echo "$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )")"
 
 echo "Installing requirements"
-export GO111MODULE=on
 go install -mod=vendor ./vendor/github.com/onsi/ginkgo/ginkgo
 go install -mod=vendor ./vendor/github.com/golang/mock/mockgen
-curl -sfL "https://install.goreleaser.com/github.com/golangci/golangci-lint.sh" | sh -s -- -b $(go env GOPATH)/bin v1.17.1
+
+# TODO: Switch back to curl when https://github.com/golangci/golangci-lint/issues/658 is resolved
+GO111MODULE=off go get -u github.com/golangci/golangci-lint/cmd/golangci-lint
+# curl -sfL "https://install.goreleaser.com/github.com/golangci/golangci-lint.sh" | sh -s -- -b $(go env GOPATH)/bin v1.17.1
+
 curl -s "https://raw.githubusercontent.com/helm/helm/v2.13.1/scripts/get" | bash -s -- --version 'v2.13.1'
 
 if [[ "$(uname -s)" == *"Darwin"* ]]; then
