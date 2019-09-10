@@ -1,5 +1,7 @@
 # Gardener Resource Manager
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/gardener/gardener-resource-manager)](https://goreportcard.com/report/github.com/gardener/gardener-resource-manager)
+
 The gardener-resource-manager is a project similar to the [kube-addon-manager](https://github.com/kubernetes/kubernetes/tree/master/cluster/addons/addon-manager).
 It manages Kubernetes resources in a target cluster which means that it creates, updates, and deletes them.
 Also, it makes sure that manual modifications to these resources are reconciled back to the desired state.
