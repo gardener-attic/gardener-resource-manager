@@ -27,11 +27,13 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/yaml"
+	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,15 +50,16 @@ type Reconciler struct {
 	ctx context.Context
 	log logr.Logger
 
-	client       client.Client
-	targetClient client.Client
+	client           client.Client
+	targetClient     client.Client
+	targetRESTMapper *restmapper.DeferredDiscoveryRESTMapper
 
 	class *ClassFilter
 }
 
 // NewReconciler creates a new reconciler with the given target client.
-func NewReconciler(ctx context.Context, log logr.Logger, c, targetClient client.Client, class *ClassFilter) *Reconciler {
-	return &Reconciler{ctx, log, c, targetClient, class}
+func NewReconciler(ctx context.Context, log logr.Logger, c, targetClient client.Client, targetRESTMapper *restmapper.DeferredDiscoveryRESTMapper, class *ClassFilter) *Reconciler {
+	return &Reconciler{ctx, log, c, targetClient, targetRESTMapper, class}
 }
 
 // Reconcile implements `reconcile.Reconciler`.
@@ -276,7 +279,13 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 					}
 					return merge(obj.obj, current, obj.forceOverwriteLabels, obj.oldInformation.Labels, obj.forceOverwriteAnnotations, obj.oldInformation.Annotations)
 				}); err != nil {
-					return fmt.Errorf("error during apply of object %q: %+v", resource, err)
+					if meta.IsNoMatchError(err) {
+						// Reset RESTMapper in case of cache misses.
+						// TODO: Remove this as soon as https://github.com/kubernetes-sigs/controller-runtime/pull/554
+						// has been merged and released.
+						r.targetRESTMapper.Reset()
+					}
+					return fmt.Errorf("error during apply of object %q: %w", resource, err)
 				}
 				return nil
 			})
