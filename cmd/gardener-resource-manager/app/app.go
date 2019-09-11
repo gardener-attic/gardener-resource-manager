@@ -28,9 +28,13 @@ import (
 
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/discovery"
+	memcache "k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -81,7 +85,19 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 
 			utilruntime.Must(resourcesv1alpha1.AddToScheme(mgr.GetScheme()))
 
-			targetClient, err := getTargetClient(targetKubeconfigPath)
+			targetConfig, err := getTargetConfig(targetKubeconfigPath)
+			if err != nil {
+				entryLog.Error(err, "unable to create REST config for target cluster")
+				os.Exit(1)
+			}
+
+			targetRESTMapper, err := getTargetRESTMapper(targetConfig)
+			if err != nil {
+				entryLog.Error(err, "unable to create REST mapper for target cluster")
+				os.Exit(1)
+			}
+
+			targetClient, err := getTargetClient(*targetConfig, targetRESTMapper)
 			if err != nil {
 				entryLog.Error(err, "unable to create client for target cluster")
 				os.Exit(1)
@@ -98,6 +114,7 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 					log.WithName("reconciler"),
 					mgr.GetClient(),
 					targetClient,
+					targetRESTMapper,
 					filter,
 				),
 			})
@@ -188,6 +205,14 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 	return cmd
 }
 
+func getTargetRESTMapper(config *rest.Config) (*restmapper.DeferredDiscoveryRESTMapper, error) {
+	targetDiscoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	return restmapper.NewDeferredDiscoveryRESTMapper(memcache.NewMemCacheClient(targetDiscoveryClient)), nil
+}
+
 func getTargetConfig(kubeconfigPath string) (*rest.Config, error) {
 	if len(kubeconfigPath) > 0 {
 		return clientcmd.BuildConfigFromFlags("", kubeconfigPath)
@@ -206,14 +231,11 @@ func getTargetConfig(kubeconfigPath string) (*rest.Config, error) {
 	return nil, fmt.Errorf("could not create config for cluster")
 }
 
-func getTargetClient(kubeconfigPath string) (client.Client, error) {
-	targetConfig, err := getTargetConfig(kubeconfigPath)
-	if err != nil {
-		return nil, err
-	}
+func getTargetClient(config rest.Config, restMapper meta.RESTMapper) (client.Client, error) {
+	config.QPS = 100.0
+	config.Burst = 130
 
-	targetConfig.QPS = 100.0
-	targetConfig.Burst = 130
-
-	return client.New(targetConfig, client.Options{})
+	return client.New(&config, client.Options{
+		Mapper: restMapper,
+	})
 }
