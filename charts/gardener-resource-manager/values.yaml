@@ -5,8 +5,13 @@ image:
 
 resources: {}
 
-syncPeriod: 1m0s
-concurrentSyncs: 10
+controllers:
+  managedResource:
+    syncPeriod: 1m0s
+    concurrentSyncs: 10
+  managedResourceHealth:
+    syncPeriod: 1m0s
+    concurrentSyncs: 10
 
 leaderElection:
   enabled: true

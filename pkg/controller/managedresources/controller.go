@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
+	resourcesv1alpha1helper "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1/helper"
 	"github.com/gardener/gardener-resource-manager/pkg/controller/utils"
 
 	"github.com/go-logr/logr"
@@ -28,7 +29,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -48,17 +48,15 @@ type Reconciler struct {
 	ctx context.Context
 	log logr.Logger
 
-	scheme *runtime.Scheme
-	client client.Client
-
+	client       client.Client
 	targetClient client.Client
 
 	class *ClassFilter
 }
 
 // NewReconciler creates a new reconciler with the given target client.
-func NewReconciler(ctx context.Context, log logr.Logger, scheme *runtime.Scheme, c, targetClient client.Client, rescClass *ClassFilter) *Reconciler {
-	return &Reconciler{ctx, log, scheme, c, targetClient, rescClass}
+func NewReconciler(ctx context.Context, log logr.Logger, c, targetClient client.Client, class *ClassFilter) *Reconciler {
+	return &Reconciler{ctx, log, c, targetClient, class}
 }
 
 // Reconcile implements `reconcile.Reconciler`.
@@ -75,19 +73,19 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return reconcile.Result{}, err
 	}
 
-	action, resp := r.class.Active(mr)
-	log.Info(fmt.Sprintf("reconcile: action required: %t, responsible: %t\n", action, resp))
+	action, responsible := r.class.Active(mr)
+	log.Info(fmt.Sprintf("reconcile: action required: %t, responsible: %t", action, responsible))
 
-	// if the object should be deleted or the responsibility changed
+	// If the object should be deleted or the responsibility changed
 	// the actual deployments have to be deleted
-	if mr.DeletionTimestamp != nil || (action && !resp) {
+	if mr.DeletionTimestamp != nil || (action && !responsible) {
 		return r.delete(mr, log)
 	}
 
-	// if the deletion after a change of responsibility is still
+	// If the deletion after a change of responsibility is still
 	// pending, the handling of the object by the responsible controller
 	// must be delayed, until the deletion is finished.
-	if resp && !action {
+	if responsible && !action {
 		return ctrl.Result{Requeue: true}, nil
 	}
 	return r.reconcile(mr, log)
@@ -118,10 +116,21 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 		forceOverwriteAnnotations = *v
 	}
 
+	// Initialize condition based on the current status.
+	conditionResourcesApplied := resourcesv1alpha1helper.GetOrInitCondition(mr.Status.Conditions, resourcesv1alpha1.ResourcesApplied)
+
 	for _, ref := range mr.Spec.SecretRefs {
 		secret := &corev1.Secret{}
 		if err := r.client.Get(r.ctx, types.NamespacedName{Namespace: mr.Namespace, Name: ref.Name}, secret); err != nil {
 			log.Error(err, "Could not read secret", "name", secret.Name)
+
+			conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, "CannotReadSecret", err.Error())
+			newConditions := resourcesv1alpha1helper.MergeConditions(mr.Status.Conditions, conditionResourcesApplied)
+			if err := tryUpdateManagedResourceStatus(r.ctx, r.client, mr, newConditions, mr.Status.Resources); err != nil {
+				log.Error(err, "Could not update the ManagedResource status")
+				return ctrl.Result{}, err
+			}
+
 			return reconcile.Result{}, err
 		}
 
@@ -169,25 +178,45 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 	}
 
 	if deletionPending, err := r.cleanOldResources(mr, newResourcesSet); err != nil {
+		var reason string
+		var message string
 		if deletionPending {
+			reason = "DeletionPending"
+			message = "Deletion is still pending"
 			log.Error(err, "Deletion is still pending")
 		} else {
+			reason = "DeletionFailed"
+			message = "Deletion of old resources failed"
 			log.Error(err, "Deletion of old resources failed")
 		}
-		return ctrl.Result{}, err
-	}
 
-	if err := utils.TryUpdateStatus(r.ctx, retry.DefaultBackoff, r.client, mr, func() error {
-		mr.Status.ObservedGeneration = mr.Generation
-		mr.Status.Resources = newResourcesObjectReferences
-		return nil
-	}); err != nil {
-		log.Error(err, "Could not update the ManagedResource status")
+		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, reason, message)
+		newConditions := resourcesv1alpha1helper.MergeConditions(mr.Status.Conditions, conditionResourcesApplied)
+		if err := tryUpdateManagedResourceStatus(r.ctx, r.client, mr, newConditions, mr.Status.Resources); err != nil {
+			log.Error(err, "Could not update the ManagedResource status")
+			return ctrl.Result{}, err
+		}
+
 		return ctrl.Result{}, err
 	}
 
 	if err := r.applyNewResources(newResourcesObjects, mr.Spec.InjectLabels); err != nil {
 		log.Error(err, "Could not apply all new resources")
+
+		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, "ApplyFailed", "Could not apply all new resources")
+		newConditions := resourcesv1alpha1helper.MergeConditions(mr.Status.Conditions, conditionResourcesApplied)
+		if err := tryUpdateManagedResourceStatus(r.ctx, r.client, mr, newConditions, mr.Status.Resources); err != nil {
+			log.Error(err, "Could not update the ManagedResource status")
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{}, err
+	}
+
+	conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionTrue, "ApplySucceeded", "All resources are applied.")
+	newConditions := resourcesv1alpha1helper.MergeConditions(mr.Status.Conditions, conditionResourcesApplied)
+	if err := tryUpdateManagedResourceStatus(r.ctx, r.client, mr, newConditions, newResourcesObjectReferences); err != nil {
+		log.Error(err, "Could not update the ManagedResource status")
 		return ctrl.Result{}, err
 	}
 
@@ -322,7 +351,7 @@ func (r *Reconciler) cleanOldResources(mr *resourcesv1alpha1.ManagedResource, ne
 
 	for out := range results {
 		if out.deletionPending {
-			return true, fmt.Errorf("deletion of old resource %s is still pending", out.resource)
+			return true, fmt.Errorf("Deletion of old resource %s is still pending", out.resource)
 		}
 
 		if out.err != nil {
@@ -334,6 +363,20 @@ func (r *Reconciler) cleanOldResources(mr *resourcesv1alpha1.ManagedResource, ne
 		return true, fmt.Errorf("Errors occurred during deletion: %+v", errorList)
 	}
 	return false, nil
+}
+
+func tryUpdateManagedResourceStatus(
+	ctx context.Context,
+	c client.Client,
+	mr *resourcesv1alpha1.ManagedResource,
+	conditions []resourcesv1alpha1.ManagedResourceCondition,
+	resources []resourcesv1alpha1.ObjectReference) error {
+	return utils.TryUpdateStatus(ctx, retry.DefaultBackoff, c, mr, func() error {
+		mr.Status.Conditions = conditions
+		mr.Status.Resources = resources
+		mr.Status.ObservedGeneration = mr.Generation
+		return nil
+	})
 }
 
 func objectReferenceToString(o resourcesv1alpha1.ObjectReference) string {

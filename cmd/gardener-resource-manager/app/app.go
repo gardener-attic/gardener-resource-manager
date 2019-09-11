@@ -24,36 +24,43 @@ import (
 
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
 	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources"
+	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources/health"
 
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 var log = logf.Log.WithName("gardener-resource-manager")
 
-// NewControllerManagerCommand creates a new command for running a AWS provider controller.
+// NewControllerManagerCommand creates a new command for running a gardener resource manager controllers.
 func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 	logf.SetLogger(logf.ZapLogger(false))
 	entryLog := log.WithName("entrypoint")
 
 	var (
-		leaderElection          bool
-		leaderElectionNamespace string
-		syncPeriod              time.Duration
-		targetKubeconfigPath    string
-		maxConcurrentWorkers    int
-		namespace               string
-		resourceClass           string
+		leaderElection             bool
+		leaderElectionNamespace    string
+		syncPeriod                 time.Duration
+		maxConcurrentWorkers       int
+		healthSyncPeriod           time.Duration
+		healthMaxConcurrentWorkers int
+		targetKubeconfigPath       string
+		namespace                  string
+		resourceClass              string
 	)
 
 	cmd := &cobra.Command{
@@ -89,7 +96,6 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 				Reconciler: managedresources.NewReconciler(
 					ctx,
 					log.WithName("reconciler"),
-					mgr.GetScheme(),
 					mgr.GetClient(),
 					targetClient,
 					filter,
@@ -117,8 +123,50 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 			}
 
 			entryLog.Info("Managed namespace: " + namespace)
-			entryLog.Info("Sync period: " + syncPeriod.String())
 			entryLog.Info("Resource class: " + filter.ResourceClass())
+			entryLog.Info("Managed resource controller", "syncPeriod", syncPeriod.String())
+			entryLog.Info("Managed resource controller", "maxConcurrentWorkers", maxConcurrentWorkers)
+
+			healthController, err := controller.New("health-controller", mgr, controller.Options{
+				MaxConcurrentReconciles: healthMaxConcurrentWorkers,
+				Reconciler: health.NewHealthReconciler(
+					ctx,
+					log.WithName("health-reconciler"),
+					mgr.GetClient(),
+					targetClient,
+					filter,
+					healthSyncPeriod,
+				),
+			})
+			if err != nil {
+				entryLog.Error(err, "unable to set up individual controller")
+				os.Exit(1)
+			}
+
+			if err := healthController.Watch(
+				&source.Kind{Type: &resourcesv1alpha1.ManagedResource{}},
+				&handler.Funcs{
+					CreateFunc: func(e event.CreateEvent, q workqueue.RateLimitingInterface) {
+						q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
+							Name:      e.Meta.GetName(),
+							Namespace: e.Meta.GetNamespace(),
+						}})
+					},
+					UpdateFunc: func(e event.UpdateEvent, q workqueue.RateLimitingInterface) {
+						q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
+							Name:      e.MetaNew.GetName(),
+							Namespace: e.MetaNew.GetNamespace(),
+						}})
+					},
+				},
+				filter, health.ClassChangedPredicate(),
+			); err != nil {
+				entryLog.Error(err, "unable to watch ManagedResources")
+				os.Exit(1)
+			}
+
+			entryLog.Info("Managed resource health controller", "syncPeriod", healthSyncPeriod.String())
+			entryLog.Info("Managed resource health controller", "maxConcurrentWorkers", healthMaxConcurrentWorkers)
 
 			if err := mgr.Start(ctx.Done()); err != nil {
 				entryLog.Error(err, "error running manager")
@@ -130,8 +178,10 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 	cmd.Flags().BoolVar(&leaderElection, "leader-election", true, "enable or disable leader election")
 	cmd.Flags().StringVar(&leaderElectionNamespace, "leader-election-namespace", "", "namespace for leader election")
 	cmd.Flags().DurationVar(&syncPeriod, "sync-period", time.Minute, "duration how often existing resources should be synced")
-	cmd.Flags().StringVar(&targetKubeconfigPath, "target-kubeconfig", "", "path to the kubeconfig for the target cluster")
 	cmd.Flags().IntVar(&maxConcurrentWorkers, "max-concurrent-workers", 10, "number of worker threads for concurrent reconciliation of resources")
+	cmd.Flags().DurationVar(&healthSyncPeriod, "health-sync-period", time.Minute, "duration how often the health of existing resources should be synced")
+	cmd.Flags().IntVar(&healthMaxConcurrentWorkers, "health-max-concurrent-workers", 10, "number of worker threads for concurrent health reconciliation of resources")
+	cmd.Flags().StringVar(&targetKubeconfigPath, "target-kubeconfig", "", "path to the kubeconfig for the target cluster")
 	cmd.Flags().StringVar(&namespace, "namespace", "", "namespace in which the ManagedResources should be observed (defaults to all namespaces)")
 	cmd.Flags().StringVar(&resourceClass, "resource-class", managedresources.DefaultClass, "resource class used to filter resource resources")
 
