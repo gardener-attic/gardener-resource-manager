@@ -82,7 +82,7 @@ var (
 )
 
 // CheckPod checks whether the given Pod is healthy.
-// A Pod is considered healthy if its `.status.phase` is `Runnung` or `Succeeded`.
+// A Pod is considered healthy if its `.status.phase` is `Running` or `Succeeded`.
 func CheckPod(pod *corev1.Pod) error {
 	var phase = pod.Status.Phase
 	for _, healthyPhase := range healthyPodPhases {
