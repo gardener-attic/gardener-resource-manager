@@ -47,7 +47,7 @@ func (r *HealthReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return reconcile.Result{}, err
 	}
 
-	// Check responsability
+	// Check responsibility
 	if _, responsible := r.classFilter.Active(mr); !responsible {
 		log.Info("Stopping health checks as the responsibility changed")
 		return ctrl.Result{}, nil // Do not requeue
