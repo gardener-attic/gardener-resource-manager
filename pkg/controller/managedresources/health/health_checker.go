@@ -15,6 +15,7 @@
 package health
 
 import (
+	pkghealth "github.com/gardener/gardener-resource-manager/pkg/health"
 	"github.com/gardener/gardener/pkg/utils/kubernetes/health"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -33,7 +34,7 @@ func CheckHealth(obj runtime.Unstructured) error {
 		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), crd); err != nil {
 			return err
 		}
-		return CheckCustomResourceDefinition(crd)
+		return pkghealth.CheckCustomResourceDefinition(crd)
 	case appsv1.SchemeGroupVersion.WithKind("DaemonSet").GroupKind():
 		ds := &appsv1.DaemonSet{}
 		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), ds); err != nil {
@@ -51,25 +52,25 @@ func CheckHealth(obj runtime.Unstructured) error {
 		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), job); err != nil {
 			return err
 		}
-		return CheckJob(job)
+		return pkghealth.CheckJob(job)
 	case corev1.SchemeGroupVersion.WithKind("Pod").GroupKind():
 		pod := &corev1.Pod{}
 		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), pod); err != nil {
 			return err
 		}
-		return CheckPod(pod)
+		return pkghealth.CheckPod(pod)
 	case appsv1.SchemeGroupVersion.WithKind("ReplicaSet").GroupKind():
 		rs := &appsv1.ReplicaSet{}
 		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), rs); err != nil {
 			return err
 		}
-		return CheckReplicaSet(rs)
+		return pkghealth.CheckReplicaSet(rs)
 	case corev1.SchemeGroupVersion.WithKind("ReplicationController").GroupKind():
 		rc := &corev1.ReplicationController{}
 		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), rc); err != nil {
 			return err
 		}
-		return CheckReplicationController(rc)
+		return pkghealth.CheckReplicationController(rc)
 	case appsv1.SchemeGroupVersion.WithKind("StatefulSet").GroupKind():
 		statefulSet := &appsv1.StatefulSet{}
 		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), statefulSet); err != nil {
