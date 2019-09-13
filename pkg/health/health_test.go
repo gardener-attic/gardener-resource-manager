@@ -159,7 +159,7 @@ var _ = Describe("health", func() {
 	Context("CheckManagedResource", func() {
 		DescribeTable("managedresource",
 			func(mr v1alpha1.ManagedResource, matcher types.GomegaMatcher) {
-				err := health.CheckManagedResource(mr)
+				err := health.CheckManagedResource(&mr)
 				Expect(err).To(matcher)
 			},
 			Entry("applied condition not true", v1alpha1.ManagedResource{

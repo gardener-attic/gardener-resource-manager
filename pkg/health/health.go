@@ -35,7 +35,7 @@ var (
 
 // CheckManagedResource checks if the conditions of ManagedResources are healthy.
 // It additionally checks whether at least the `v1alpha1.ResourcesApplied` has been reported.
-func CheckManagedResource(mr v1alpha1.ManagedResource) error {
+func CheckManagedResource(mr *v1alpha1.ManagedResource) error {
 	status := mr.Status
 	if status.ObservedGeneration != mr.GetGeneration() {
 		return fmt.Errorf("observed generation of managed resource %s/%s outdated (%d/%d)", mr.GetNamespace(), mr.GetName(), status.ObservedGeneration, mr.GetGeneration())
