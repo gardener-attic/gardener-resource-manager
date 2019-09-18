@@ -63,6 +63,7 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 		healthSyncPeriod           time.Duration
 		healthMaxConcurrentWorkers int
 		targetKubeconfigPath       string
+		kubeconfigPath             string
 		namespace                  string
 		resourceClass              string
 	)
@@ -71,7 +72,19 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 		Use: "gardener-resource-manager",
 
 		Run: func(cmd *cobra.Command, args []string) {
-			mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{
+			var cfg *rest.Config
+			var err error
+			if kubeconfigPath != "" {
+				cfg, err = clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+				if err != nil {
+					entryLog.Error(err, "could not instantiate rest config")
+					os.Exit(1)
+				}
+				entryLog.Info("using kubeconfig " + kubeconfigPath)
+			} else {
+				cfg = config.GetConfigOrDie()
+			}
+			mgr, err := manager.New(cfg, manager.Options{
 				LeaderElection:          leaderElection,
 				LeaderElectionID:        "gardener-resource-manager",
 				LeaderElectionNamespace: leaderElectionNamespace,
@@ -198,6 +211,7 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 	cmd.Flags().IntVar(&maxConcurrentWorkers, "max-concurrent-workers", 10, "number of worker threads for concurrent reconciliation of resources")
 	cmd.Flags().DurationVar(&healthSyncPeriod, "health-sync-period", time.Minute, "duration how often the health of existing resources should be synced")
 	cmd.Flags().IntVar(&healthMaxConcurrentWorkers, "health-max-concurrent-workers", 10, "number of worker threads for concurrent health reconciliation of resources")
+	cmd.Flags().StringVar(&kubeconfigPath, "kubeconfig", "", "path to the kubeconfig for the source cluster")
 	cmd.Flags().StringVar(&targetKubeconfigPath, "target-kubeconfig", "", "path to the kubeconfig for the target cluster")
 	cmd.Flags().StringVar(&namespace, "namespace", "", "namespace in which the ManagedResources should be observed (defaults to all namespaces)")
 	cmd.Flags().StringVar(&resourceClass, "resource-class", managedresources.DefaultClass, "resource class used to filter resource resources")

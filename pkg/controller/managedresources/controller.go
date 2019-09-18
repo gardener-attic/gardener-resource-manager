@@ -106,7 +106,7 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 		newResourcesObjectReferences []resourcesv1alpha1.ObjectReference
 		newResourcesSet              = sets.NewString()
 
-		existingResourcesIndex = indexResources(mr.Status.Resources)
+		existingResourcesIndex = NewObjectIndex(mr.Status.Resources, mr.Spec.Equivalences)
 
 		forceOverwriteLabels      bool
 		forceOverwriteAnnotations bool
@@ -170,17 +170,17 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 					}
 				)
 
-				newObj.oldInformation = existingResourcesIndex[objectReferenceToString(objectReference)]
+				newObj.oldInformation, _ = existingResourcesIndex.Lookup(objectReference)
 				decodedObj = nil
 
 				newResourcesObjects = append(newResourcesObjects, newObj)
 				newResourcesObjectReferences = append(newResourcesObjectReferences, objectReference)
-				newResourcesSet.Insert(objectReferenceToString(objectReference))
+				newResourcesSet.Insert(objectKeyByReference(objectReference))
 			}
 		}
 	}
 
-	if deletionPending, err := r.cleanOldResources(mr, newResourcesSet); err != nil {
+	if deletionPending, err := r.cleanOldResources(existingResourcesIndex); err != nil {
 		var reason string
 		var message string
 		if deletionPending {
@@ -231,7 +231,8 @@ func (r *Reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logg
 	log.Info("Starting to delete ManagedResource")
 
 	if keepObjects := mr.Spec.KeepObjects; keepObjects == nil || !*keepObjects {
-		if deletionPending, err := r.cleanOldResources(mr, sets.NewString()); err != nil {
+		existingResourcesIndex := NewObjectIndex(mr.Status.Resources, nil)
+		if deletionPending, err := r.cleanOldResources(existingResourcesIndex); err != nil {
 			if deletionPending {
 				log.Error(err, "Deletion is still pending")
 			} else {
@@ -285,7 +286,7 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 						// has been merged and released.
 						r.targetRESTMapper.Reset()
 					}
-					return fmt.Errorf("error during apply of object %q: %w", resource, err)
+					return fmt.Errorf("error during apply of object %q: %s", resource, err)
 				}
 				return nil
 			})
@@ -310,7 +311,7 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 	return nil
 }
 
-func (r *Reconciler) cleanOldResources(mr *resourcesv1alpha1.ManagedResource, newResourcesSet sets.String) (bool, error) {
+func (r *Reconciler) cleanOldResources(index *ObjectIndex) (bool, error) {
 	type output struct {
 		resource        string
 		deletionPending bool
@@ -323,12 +324,9 @@ func (r *Reconciler) cleanOldResources(mr *resourcesv1alpha1.ManagedResource, ne
 		errorList = []error{}
 	)
 
-	for _, oldResource := range mr.Status.Resources {
-		resource := objectReferenceToString(oldResource)
-
-		if !newResourcesSet.Has(resource) {
+	for _, oldResource := range index.Objects() {
+		if !index.Found(oldResource) {
 			wg.Add(1)
-
 			go func(ref resourcesv1alpha1.ObjectReference) {
 				defer wg.Done()
 
@@ -338,6 +336,7 @@ func (r *Reconciler) cleanOldResources(mr *resourcesv1alpha1.ManagedResource, ne
 				obj.SetNamespace(ref.Namespace)
 				obj.SetName(ref.Name)
 
+				resource := unstructuredToString(obj)
 				r.log.Info("Deleting", "resource", resource)
 				if err := r.targetClient.Delete(r.ctx, obj); err != nil {
 					if !apierrors.IsNotFound(err) {
@@ -388,12 +387,17 @@ func tryUpdateManagedResourceStatus(
 	})
 }
 
-func objectReferenceToString(o resourcesv1alpha1.ObjectReference) string {
-	return fmt.Sprintf("%s/%s/%s/%s", o.APIVersion, o.Kind, o.Namespace, o.Name)
+func objectKey(group, kind, namespace, name string) string {
+	return fmt.Sprintf("%s/%s/%s/%s", group, kind, namespace, name)
+}
+
+func objectKeyByReference(o resourcesv1alpha1.ObjectReference) string {
+	return objectKey(o.GroupVersionKind().Group, o.Kind, o.Namespace, o.Name)
 }
 
 func unstructuredToString(o *unstructured.Unstructured) string {
-	return fmt.Sprintf("%s/%s/%s/%s", o.GetAPIVersion(), o.GetKind(), o.GetNamespace(), o.GetName())
+	// return no key, but an description including the version
+	return objectKey(o.GetAPIVersion(), o.GetKind(), o.GetNamespace(), o.GetName())
 }
 
 func injectLabels(obj *unstructured.Unstructured, labels map[string]string) error {
@@ -451,16 +455,6 @@ func mergeMaps(one, two map[string]string) map[string]string {
 	for k, v := range two {
 		out[k] = v
 	}
-	return out
-}
-
-func indexResources(resources []resourcesv1alpha1.ObjectReference) map[string]resourcesv1alpha1.ObjectReference {
-	out := make(map[string]resourcesv1alpha1.ObjectReference, len(resources))
-
-	for _, r := range resources {
-		out[objectReferenceToString(r)] = r
-	}
-
 	return out
 }
 

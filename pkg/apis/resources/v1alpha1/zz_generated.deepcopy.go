@@ -19,6 +19,7 @@ package v1alpha1
 
 import (
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -135,6 +136,17 @@ func (in *ManagedResourceSpec) DeepCopyInto(out *ManagedResourceSpec) {
 		in, out := &in.KeepObjects, &out.KeepObjects
 		*out = new(bool)
 		**out = **in
+	}
+	if in.Equivalences != nil {
+		in, out := &in.Equivalences, &out.Equivalences
+		*out = make([][]metav1.GroupKind, len(*in))
+		for i := range *in {
+			if (*in)[i] != nil {
+				in, out := &(*in)[i], &(*out)[i]
+				*out = make([]metav1.GroupKind, len(*in))
+				copy(*out, *in)
+			}
+		}
 	}
 	return
 }
