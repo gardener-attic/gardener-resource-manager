@@ -63,6 +63,9 @@ type ManagedResourceSpec struct {
 	// Defaults to false.
 	// +optional
 	KeepObjects *bool `json:"keepObjects,omitempty"`
+	// Equivalences specifies possible group/kind equivalences for objects.
+	// +optional
+	Equivalences [][]metav1.GroupKind `json:"equivalences,omitempty"`
 }
 
 // ManagedResourceStatus is the status of a managed resource.
