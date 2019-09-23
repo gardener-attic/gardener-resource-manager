@@ -16,9 +16,10 @@ package managedresources
 
 import (
 	"github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	schema "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -28,9 +29,9 @@ var _ = Describe("Resource Equivalences", func() {
 		It("single set ", func() {
 			equis := equivalences{
 				[]schema.GroupKind{
-					schema.GroupKind{"groupA", "kindA"},
-					schema.GroupKind{"groupB", "kindB"},
-					schema.GroupKind{"groupC", "kindC"},
+					{Group: "groupA", Kind: "kindA"},
+					{Group: "groupB", Kind: "kindB"},
+					{Group: "groupC", Kind: "kindC"},
 				},
 			}
 
@@ -44,14 +45,14 @@ var _ = Describe("Resource Equivalences", func() {
 		It("multiple sets", func() {
 			equis := equivalences{
 				[]schema.GroupKind{
-					schema.GroupKind{"groupA", "kindA"},
-					schema.GroupKind{"groupB", "kindB"},
-					schema.GroupKind{"groupC", "kindC"},
+					{Group: "groupA", Kind: "kindA"},
+					{Group: "groupB", Kind: "kindB"},
+					{Group: "groupC", Kind: "kindC"},
 				},
 				[]schema.GroupKind{
-					schema.GroupKind{"groupA1", "kindA1"},
-					schema.GroupKind{"groupB1", "kindB1"},
-					schema.GroupKind{"groupC1", "kindC1"},
+					{Group: "groupA1", Kind: "kindA1"},
+					{Group: "groupB1", Kind: "kindB1"},
+					{Group: "groupC1", Kind: "kindC1"},
 				},
 			}
 
@@ -71,12 +72,12 @@ var _ = Describe("Resource Equivalences", func() {
 		It("mixed sets", func() {
 			equis := equivalences{
 				[]schema.GroupKind{
-					schema.GroupKind{"groupA", "kindA"},
-					schema.GroupKind{"groupB", "kindB"},
+					{Group: "groupA", Kind: "kindA"},
+					{Group: "groupB", Kind: "kindB"},
 				},
 				[]schema.GroupKind{
-					schema.GroupKind{"groupB", "kindB"},
-					schema.GroupKind{"groupC", "kindC"},
+					{Group: "groupB", Kind: "kindB"},
+					{Group: "groupC", Kind: "kindC"},
 				},
 			}
 
@@ -94,9 +95,9 @@ var _ = Describe("Resource Equivalences", func() {
 		It("single", func() {
 			equis := equivalences{
 				[]schema.GroupKind{
-					schema.GroupKind{"groupA", "kindA"},
-					schema.GroupKind{"groupB", "kindB"},
-					schema.GroupKind{"groupC", "kindC"},
+					{Group: "groupA", Kind: "kindA"},
+					{Group: "groupB", Kind: "kindB"},
+					{Group: "groupC", Kind: "kindC"},
 				},
 			}
 

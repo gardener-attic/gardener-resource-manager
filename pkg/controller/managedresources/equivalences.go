@@ -16,8 +16,8 @@ package managedresources
 
 import (
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	//"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
@@ -107,7 +107,10 @@ func (i ObjectIndex) Lookup(ref resourcesv1alpha1.ObjectReference) (resourcesv1a
 		i.found.Insert(key)
 		return found, ok
 	}
-	gk := metav1.GroupKind{ref.GroupVersionKind().Group, ref.Kind}
+	gk := metav1.GroupKind{
+		Group: ref.GroupVersionKind().Group,
+		Kind:  ref.Kind,
+	}
 	equis, ok := i.equivalences[gk]
 	if ok {
 		for e := range equis {
@@ -127,7 +130,10 @@ func EquiSetForKind(kind string, groups ...string) []metav1.GroupKind {
 	r := []metav1.GroupKind{}
 
 	for _, g := range groups {
-		r = append(r, metav1.GroupKind{g, kind})
+		r = append(r, metav1.GroupKind{
+			Group: g,
+			Kind:  kind,
+		})
 	}
 	return r
 }

@@ -148,14 +148,9 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 					continue
 				}
 
-				obj := &unstructured.Unstructured{Object: decodedObj}
-				if obj.GetKind() != "Namespace" && obj.GetNamespace() == "" {
-					obj.SetNamespace(metav1.NamespaceDefault)
-				}
-
 				var (
 					newObj = object{
-						obj:                       obj,
+						obj:                       &unstructured.Unstructured{Object: decodedObj},
 						forceOverwriteLabels:      forceOverwriteLabels,
 						forceOverwriteAnnotations: forceOverwriteAnnotations,
 					}
@@ -388,6 +383,9 @@ func tryUpdateManagedResourceStatus(
 }
 
 func objectKey(group, kind, namespace, name string) string {
+	if kind != "Namespace" && namespace == "" {
+		namespace = metav1.NamespaceDefault
+	}
 	return fmt.Sprintf("%s/%s/%s/%s", group, kind, namespace, name)
 }
 
