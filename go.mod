@@ -3,7 +3,7 @@ module github.com/gardener/gardener-resource-manager
 go 1.13
 
 require (
-	github.com/gardener/gardener v0.0.0-20190910145521-61b1a94eccba
+	github.com/gardener/gardener v0.0.0-20190913144920-5b4adb9f114d
 	github.com/go-logr/logr v0.1.0
 	github.com/go-logr/zapr v0.1.1
 	github.com/golang/mock v1.3.1

@@ -17,6 +17,7 @@ package health
 import (
 	"fmt"
 
+	"github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -31,6 +32,31 @@ var (
 		apiextensionsv1beta1.Terminating,
 	}
 )
+
+// CheckManagedResource checks if the conditions of ManagedResources are healthy.
+// It additionally checks whether at least the `v1alpha1.ResourcesApplied` has been reported.
+func CheckManagedResource(mr *v1alpha1.ManagedResource) error {
+	status := mr.Status
+	if status.ObservedGeneration != mr.GetGeneration() {
+		return fmt.Errorf("observed generation of managed resource %s/%s outdated (%d/%d)", mr.GetNamespace(), mr.GetName(), status.ObservedGeneration, mr.GetGeneration())
+	}
+
+	appliedCondition := false
+	for _, cond := range status.Conditions {
+		if cond.Status != v1alpha1.ConditionTrue {
+			return fmt.Errorf("condition %s of managed resource %s/%s is %s - waiting to become %s", cond.Type, mr.GetNamespace(), mr.GetName(), cond.Status, v1alpha1.ConditionTrue)
+		}
+		if cond.Type == v1alpha1.ResourcesApplied {
+			appliedCondition = true
+		}
+	}
+
+	if !appliedCondition {
+		return fmt.Errorf("condition %s for managed resource %s/%s has not been reported yet", v1alpha1.ResourcesApplied, mr.GetNamespace(), mr.GetName())
+	}
+
+	return nil
+}
 
 // CheckCustomResourceDefinition checks whether the given CustomResourceDefinition is healthy.
 // A CRD is considered healthy if its `NamesAccepted` and `Established` conditions are with status `True`

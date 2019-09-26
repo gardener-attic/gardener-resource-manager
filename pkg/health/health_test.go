@@ -17,7 +17,8 @@ package health_test
 import (
 	"testing"
 
-	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources/health"
+	"github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
+	"github.com/gardener/gardener-resource-manager/pkg/health"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -152,6 +153,90 @@ var _ = Describe("health", func() {
 				Spec:   corev1.ReplicationControllerSpec{Replicas: replicas(2)},
 				Status: corev1.ReplicationControllerStatus{ReadyReplicas: 2},
 			}, BeNil()),
+		)
+	})
+
+	Context("CheckManagedResource", func() {
+		DescribeTable("managedresource",
+			func(mr v1alpha1.ManagedResource, matcher types.GomegaMatcher) {
+				err := health.CheckManagedResource(&mr)
+				Expect(err).To(matcher)
+			},
+			Entry("applied condition not true", v1alpha1.ManagedResource{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+				Status: v1alpha1.ManagedResourceStatus{
+					ObservedGeneration: 1,
+					Conditions: []v1alpha1.ManagedResourceCondition{
+						{
+							Type:   v1alpha1.ResourcesApplied,
+							Status: v1alpha1.ConditionFalse,
+						},
+						{
+							Type:   v1alpha1.ResourcesHealthy,
+							Status: v1alpha1.ConditionTrue,
+						},
+					},
+				},
+			}, HaveOccurred()),
+			Entry("healthy condition not true", v1alpha1.ManagedResource{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+				Status: v1alpha1.ManagedResourceStatus{
+					ObservedGeneration: 1,
+					Conditions: []v1alpha1.ManagedResourceCondition{
+						{
+							Type:   v1alpha1.ResourcesApplied,
+							Status: v1alpha1.ConditionTrue,
+						},
+						{
+							Type:   v1alpha1.ResourcesHealthy,
+							Status: v1alpha1.ConditionFalse,
+						},
+					},
+				},
+			}, HaveOccurred()),
+			Entry("conditions true", v1alpha1.ManagedResource{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+				Status: v1alpha1.ManagedResourceStatus{
+					ObservedGeneration: 1,
+					Conditions: []v1alpha1.ManagedResourceCondition{
+						{
+							Type:   v1alpha1.ResourcesApplied,
+							Status: v1alpha1.ConditionTrue,
+						},
+						{
+							Type:   v1alpha1.ResourcesHealthy,
+							Status: v1alpha1.ConditionTrue,
+						},
+					},
+				},
+			}, Not(HaveOccurred())),
+			Entry("no applied condition", v1alpha1.ManagedResource{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+				Status: v1alpha1.ManagedResourceStatus{
+					ObservedGeneration: 1,
+					Conditions: []v1alpha1.ManagedResourceCondition{
+						{
+							Type:   v1alpha1.ResourcesHealthy,
+							Status: v1alpha1.ConditionTrue,
+						},
+					},
+				},
+			}, HaveOccurred()),
+			Entry("no conditions", v1alpha1.ManagedResource{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+				Status: v1alpha1.ManagedResourceStatus{
+					ObservedGeneration: 1,
+				},
+			}, HaveOccurred()),
+			Entry("outdated generation", v1alpha1.ManagedResource{
+				ObjectMeta: metav1.ObjectMeta{Generation: 2},
+				Status: v1alpha1.ManagedResourceStatus{
+					ObservedGeneration: 1,
+				},
+			}, HaveOccurred()),
+			Entry("no status", v1alpha1.ManagedResource{
+				ObjectMeta: metav1.ObjectMeta{Generation: 2},
+			}, HaveOccurred()),
 		)
 	})
 })
