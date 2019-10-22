@@ -41,5 +41,15 @@ The following section describes a healthy ManagedResource:
     "lastUpdateTime": "2019-09-09T11:31:21Z",
     "lastTransitionTime": "2019-09-09T11:31:21Z"
   }
-]   
+]  
 ```
+
+## Ignoring Updates 
+
+In some cases it is not desirable to update or re-apply some of the cluster components (for example, if customization is required or needs to be applied by the end-user). 
+For these resources, the annotation "resources.gardener.cloud/ignore" needs to be set to "true" or a truthy value (Truthy values are "1", "t", "T", "true", "TRUE", "True") in the corresponding managed resource secrets, 
+this can be done from the components that create the managed resource secrets, for example Gardener extensions or Gardener. Once this is done, the resource will be initially created and later ignored during reconciliation.
+
+
+
+

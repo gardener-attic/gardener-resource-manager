@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"strconv"
 	"sync"
 
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
@@ -37,13 +39,14 @@ import (
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// FinalizerName is the finalizer base name that is injected into ManagedResources.
-// The concrete finalizer is finally componed by this base name and the resource class.
-const FinalizerName = "resources.gardener.cloud/gardener-resource-manager"
+const (
+	// FinalizerName is the finalizer base name that is injected into ManagedResources.
+	// The concrete finalizer is finally componed by this base name and the resource class.
+	FinalizerName = "resources.gardener.cloud/gardener-resource-manager"
+)
 
 // Reconciler contains information in order to reconcile instances of ManagedResource.
 type Reconciler struct {
@@ -270,6 +273,15 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 
 			results <- retry.RetryOnConflict(retry.DefaultBackoff, func() (err error) {
 				if _, err := controllerutil.CreateOrUpdate(r.ctx, r.targetClient, current, func() error {
+					metadata, err := meta.Accessor(obj.obj)
+					if err != nil {
+						return err
+					}
+					// if the reconcile annotation is set to false, do nothing (ignore the resource)
+					if ignore(metadata) {
+						return nil
+					}
+
 					if err := injectLabels(obj.obj, labelsToInject); err != nil {
 						return err
 					}
@@ -304,6 +316,13 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 	}
 
 	return nil
+}
+
+func ignore(meta metav1.Object) bool {
+	val, annotationExists := meta.GetAnnotations()[resourcesv1alpha1.ResourceManagerIgnoreAnnotation]
+	ignoreSet, _ := strconv.ParseBool(val)
+
+	return annotationExists && ignoreSet
 }
 
 func (r *Reconciler) cleanOldResources(index *ObjectIndex) (bool, error) {
