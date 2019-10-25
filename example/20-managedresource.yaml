@@ -12,6 +12,8 @@ stringData:
     metadata:
       name: test-1234
       namespace: default
+      annotations:
+        resources.gardener.cloud/ignore: "true"
     ---
     apiVersion: v1
     kind: ConfigMap

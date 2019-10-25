@@ -19,6 +19,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// ResourceManagerIgnoreAnnotation is an annotation that dictates whether a resources should be ignored during reconciliation.
+const ResourceManagerIgnoreAnnotation = "resources.gardener.cloud/ignore"
+
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // ManagedResource describes a list of managed resources.
