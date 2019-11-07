@@ -16,8 +16,8 @@ package health
 
 import (
 	pkghealth "github.com/gardener/gardener-resource-manager/pkg/health"
-	"github.com/gardener/gardener/pkg/utils/kubernetes/health"
 
+	"github.com/gardener/gardener/pkg/utils/kubernetes/health"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"

@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"strconv"
 	"sync"
 
@@ -39,6 +38,7 @@ import (
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -151,9 +151,14 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 					continue
 				}
 
+				obj := &unstructured.Unstructured{Object: decodedObj}
+				if obj.GetKind() != "Namespace" && obj.GetNamespace() == "" {
+					obj.SetNamespace(metav1.NamespaceDefault)
+				}
+
 				var (
 					newObj = object{
-						obj:                       &unstructured.Unstructured{Object: decodedObj},
+						obj:                       obj,
 						forceOverwriteLabels:      forceOverwriteLabels,
 						forceOverwriteAnnotations: forceOverwriteAnnotations,
 					}
