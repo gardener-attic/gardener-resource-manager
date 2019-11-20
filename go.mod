@@ -18,7 +18,7 @@ require (
 	k8s.io/code-generator v0.0.0-20190713022532-93d7507fc8ff
 	k8s.io/gengo v0.0.0-20190826232639-a874a240740c // indirect
 	k8s.io/kube-openapi v0.0.0-20190722073852-5e22f3d471e6
-	sigs.k8s.io/controller-runtime v0.2.0-beta.2
+	sigs.k8s.io/controller-runtime v0.2.0-beta.5
 )
 
 replace (
@@ -30,5 +30,5 @@ replace (
 	k8s.io/client-go => k8s.io/client-go v11.0.0+incompatible // kubernetes-1.14.0
 	k8s.io/code-generator => k8s.io/code-generator v0.0.0-20190311093542-50b561225d70 // kubernetes-1.14.0
 	k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20190320154901-5e45bb682580
-	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.2.0-beta.2
+	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.2.0-beta.5
 )

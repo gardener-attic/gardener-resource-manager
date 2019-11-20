@@ -21,8 +21,8 @@ import (
 	"strings"
 
 	"github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
-	"k8s.io/apimachinery/pkg/runtime"
 
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )

@@ -21,7 +21,7 @@ import (
 	"github.com/gardener/gardener-resource-manager/cmd/gardener-resource-manager/app"
 	"github.com/gardener/gardener-resource-manager/pkg/log"
 
-	runtimelog "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+	runtimelog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
 )
 
