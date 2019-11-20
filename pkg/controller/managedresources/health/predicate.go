@@ -16,13 +16,14 @@ package health
 
 import (
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
+
 	"k8s.io/apimachinery/pkg/api/equality"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	runtimelog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
-var log = logf.Log.WithName("gardener-resource-manager")
+var log = runtimelog.Log.WithName("gardener-resource-manager")
 
 var classChangedPredicate = predicate.Funcs{
 	UpdateFunc: func(e event.UpdateEvent) bool {

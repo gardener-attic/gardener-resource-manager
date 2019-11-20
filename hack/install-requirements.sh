@@ -22,7 +22,7 @@ go install -mod=vendor ./vendor/github.com/onsi/ginkgo/ginkgo
 go install -mod=vendor ./vendor/github.com/golang/mock/mockgen
 
 # Install golangci-lint
-curl -sfL "https://install.goreleaser.com/github.com/golangci/golangci-lint.sh" | sh -s -- -b $(go env GOPATH)/bin v1.18.0
+curl -sfL "https://install.goreleaser.com/github.com/golangci/golangci-lint.sh" | sh -s -- -b $(go env GOPATH)/bin v1.21.0
 
 curl -s "https://raw.githubusercontent.com/helm/helm/v2.13.1/scripts/get" | bash -s -- --version 'v2.13.1'
 

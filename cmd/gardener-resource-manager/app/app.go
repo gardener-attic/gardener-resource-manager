@@ -25,6 +25,7 @@ import (
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
 	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources"
 	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources/health"
+	logpkg "github.com/gardener/gardener-resource-manager/pkg/log"
 
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
@@ -42,17 +43,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	runtimelog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("gardener-resource-manager")
+var log = runtimelog.Log.WithName("gardener-resource-manager")
 
 // NewControllerManagerCommand creates a new command for running a gardener resource manager controllers.
 func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
-	logf.SetLogger(logf.ZapLogger(false))
+	runtimelog.SetLogger(logpkg.ZapLogger(false))
 	entryLog := log.WithName("entrypoint")
 
 	var (
