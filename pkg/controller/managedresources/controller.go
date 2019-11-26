@@ -151,9 +151,14 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 					continue
 				}
 
+				obj := &unstructured.Unstructured{Object: decodedObj}
+				if obj.GetKind() != "Namespace" && obj.GetNamespace() == "" {
+					obj.SetNamespace(metav1.NamespaceDefault)
+				}
+
 				var (
 					newObj = object{
-						obj:                       &unstructured.Unstructured{Object: decodedObj},
+						obj:                       obj,
 						forceOverwriteLabels:      forceOverwriteLabels,
 						forceOverwriteAnnotations: forceOverwriteAnnotations,
 					}

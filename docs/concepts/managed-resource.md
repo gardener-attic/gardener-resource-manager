@@ -1,5 +1,10 @@
 # Managed Resource
 
+### Resource Class
+
+By default gardener-resource-manager controller watches for ManagedResources in all namespaces. `--namespace` flag can be specified to gardener-resource-manager binary to restrict the watch to ManagedResources in a single namespace.
+A ManagedResource has an optional `.spec.class` field that allows to indicate that it belongs to given class of resources. `--resource-class` flag can be specified to gardener-resource-manager binary to restrict the watch to ManagedResources with the given `.spec.class`. A default class is assumed if no class is specified.
+
 ### Conditions
 
 A ManagedResource has a ManagedResourceStatus, which has an array of ManagedResourceConditions. ManagedResourceConditions currently include:
@@ -49,7 +54,3 @@ The following section describes a healthy ManagedResource:
 In some cases it is not desirable to update or re-apply some of the cluster components (for example, if customization is required or needs to be applied by the end-user). 
 For these resources, the annotation "resources.gardener.cloud/ignore" needs to be set to "true" or a truthy value (Truthy values are "1", "t", "T", "true", "TRUE", "True") in the corresponding managed resource secrets, 
 this can be done from the components that create the managed resource secrets, for example Gardener extensions or Gardener. Once this is done, the resource will be initially created and later ignored during reconciliation.
-
-
-
-
