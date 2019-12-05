@@ -45,6 +45,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	runtimelog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
@@ -140,7 +141,7 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 			if err := c.Watch(
 				&source.Kind{Type: &resourcesv1alpha1.ManagedResource{}},
 				&handler.EnqueueRequestForObject{},
-				filter, managedresources.GenerationChangedPredicate(),
+				filter, predicate.GenerationChangedPredicate{},
 			); err != nil {
 				entryLog.Error(err, "unable to watch ManagedResources")
 				os.Exit(1)
