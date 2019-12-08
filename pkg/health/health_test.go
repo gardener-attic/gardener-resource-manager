@@ -20,15 +20,15 @@ import (
 	"github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
 	"github.com/gardener/gardener-resource-manager/pkg/health"
 
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func TestHealth(t *testing.T) {
@@ -89,6 +89,92 @@ var _ = Describe("health", func() {
 					},
 				},
 			}, BeNil()),
+		)
+	})
+
+	Context("CheckDaemonSet", func() {
+		oneUnavailable := intstr.FromInt(1)
+		DescribeTable("daemonsets",
+			func(daemonSet *appsv1.DaemonSet, matcher types.GomegaMatcher) {
+				err := health.CheckDaemonSet(daemonSet)
+				Expect(err).To(matcher)
+			},
+			Entry("healthy", &appsv1.DaemonSet{}, BeNil()),
+			Entry("healthy with one unavailable", &appsv1.DaemonSet{
+				Spec: appsv1.DaemonSetSpec{UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+					Type: appsv1.RollingUpdateDaemonSetStrategyType,
+					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+						MaxUnavailable: &oneUnavailable,
+					},
+				}},
+				Status: appsv1.DaemonSetStatus{
+					DesiredNumberScheduled: 2,
+					CurrentNumberScheduled: 1,
+				},
+			}, BeNil()),
+			Entry("not observed at latest version", &appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+			}, HaveOccurred()),
+			Entry("not enough updated scheduled", &appsv1.DaemonSet{
+				Status: appsv1.DaemonSetStatus{DesiredNumberScheduled: 1},
+			}, HaveOccurred()),
+		)
+	})
+
+	Context("CheckDeployment", func() {
+		DescribeTable("deployments",
+			func(deployment *appsv1.Deployment, matcher types.GomegaMatcher) {
+				err := health.CheckDeployment(deployment)
+				Expect(err).To(matcher)
+			},
+			Entry("healthy", &appsv1.Deployment{
+				Status: appsv1.DeploymentStatus{Conditions: []appsv1.DeploymentCondition{
+					{
+						Type:   appsv1.DeploymentAvailable,
+						Status: corev1.ConditionTrue,
+					},
+				}},
+			}, BeNil()),
+			Entry("healthy with progressing", &appsv1.Deployment{
+				Status: appsv1.DeploymentStatus{Conditions: []appsv1.DeploymentCondition{
+					{
+						Type:   appsv1.DeploymentAvailable,
+						Status: corev1.ConditionTrue,
+					},
+					{
+						Type:   appsv1.DeploymentProgressing,
+						Status: corev1.ConditionTrue,
+					},
+				}},
+			}, BeNil()),
+			Entry("not observed at latest version", &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+			}, HaveOccurred()),
+			Entry("not available", &appsv1.Deployment{
+				Status: appsv1.DeploymentStatus{Conditions: []appsv1.DeploymentCondition{
+					{
+						Type:   appsv1.DeploymentAvailable,
+						Status: corev1.ConditionFalse,
+					},
+					{
+						Type:   appsv1.DeploymentProgressing,
+						Status: corev1.ConditionTrue,
+					},
+				}},
+			}, HaveOccurred()),
+			Entry("not progressing", &appsv1.Deployment{
+				Status: appsv1.DeploymentStatus{Conditions: []appsv1.DeploymentCondition{
+					{
+						Type:   appsv1.DeploymentAvailable,
+						Status: corev1.ConditionTrue,
+					},
+					{
+						Type:   appsv1.DeploymentProgressing,
+						Status: corev1.ConditionFalse,
+					},
+				}},
+			}, HaveOccurred()),
+			Entry("available | progressing missing", &appsv1.Deployment{}, HaveOccurred()),
 		)
 	})
 
@@ -236,6 +322,29 @@ var _ = Describe("health", func() {
 			}, HaveOccurred()),
 			Entry("no status", v1alpha1.ManagedResource{
 				ObjectMeta: metav1.ObjectMeta{Generation: 2},
+			}, HaveOccurred()),
+		)
+	})
+
+	Context("CheckStatefulSet", func() {
+		DescribeTable("statefulsets",
+			func(statefulSet *appsv1.StatefulSet, matcher types.GomegaMatcher) {
+				err := health.CheckStatefulSet(statefulSet)
+				Expect(err).To(matcher)
+			},
+			Entry("healthy", &appsv1.StatefulSet{
+				Spec:   appsv1.StatefulSetSpec{Replicas: replicas(1)},
+				Status: appsv1.StatefulSetStatus{CurrentReplicas: 1, ReadyReplicas: 1},
+			}, BeNil()),
+			Entry("healthy with nil replicas", &appsv1.StatefulSet{
+				Status: appsv1.StatefulSetStatus{ReadyReplicas: 1},
+			}, BeNil()),
+			Entry("not observed at latest version", &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+			}, HaveOccurred()),
+			Entry("not enough ready replicas", &appsv1.StatefulSet{
+				Spec:   appsv1.StatefulSetSpec{Replicas: replicas(2)},
+				Status: appsv1.StatefulSetStatus{ReadyReplicas: 1},
 			}, HaveOccurred()),
 		)
 	})
