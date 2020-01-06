@@ -1,5 +1,6 @@
 # Gardener Resource Manager
 
+[![CI Build status](https://concourse.ci.infra.gardener.cloud/api/v1/teams/gardener/pipelines/gardener-resource-manager-master/jobs/master-head-update-job/badge)](https://concourse.ci.infra.gardener.cloud/teams/gardener/pipelines/gardener-resource-manager-master/jobs/master-head-update-job)
 [![Go Report Card](https://goreportcard.com/badge/github.com/gardener/gardener-resource-manager)](https://goreportcard.com/report/github.com/gardener/gardener-resource-manager)
 
 The gardener-resource-manager is a project similar to the [kube-addon-manager](https://github.com/kubernetes/kubernetes/tree/master/cluster/addons/addon-manager).
