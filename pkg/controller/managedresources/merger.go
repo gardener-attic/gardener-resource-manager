@@ -104,9 +104,9 @@ func mergeService(scheme *runtime.Scheme, oldObj, newObj runtime.Object) error {
 		return err
 	}
 
-	// We do not want to overwrite a Service's `.spec.clusterIP' or '.spec.ports[*].nodePort' values.
+	// We do not want to overwrite a Service's `.spec.clusterIP', `.spec.healthCheckNodePort` and '.spec.ports[*].nodePort' values.
 	newService.Spec.ClusterIP = oldService.Spec.ClusterIP
-
+	newService.Spec.HealthCheckNodePort = oldService.Spec.HealthCheckNodePort
 	var ports []corev1.ServicePort
 	for _, np := range newService.Spec.Ports {
 		p := np
