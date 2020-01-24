@@ -36,7 +36,7 @@ func CheckManagedResource(mr *v1alpha1.ManagedResource) error {
 	appliedCondition := false
 	for _, cond := range status.Conditions {
 		if cond.Status != v1alpha1.ConditionTrue {
-			return fmt.Errorf("condition %s of managed resource %s/%s is %s - waiting to become %s", cond.Type, mr.GetNamespace(), mr.GetName(), cond.Status, v1alpha1.ConditionTrue)
+			return fmt.Errorf("condition %s of managed resource %s/%s is %s: %s", cond.Type, mr.GetNamespace(), mr.GetName(), cond.Status, cond.Message)
 		}
 		if cond.Type == v1alpha1.ResourcesApplied {
 			appliedCondition = true
