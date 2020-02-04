@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"strconv"
 	"sync"
 
@@ -113,6 +114,8 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 
 		forceOverwriteLabels      bool
 		forceOverwriteAnnotations bool
+
+		decodingErrors []*decodingError
 	)
 
 	if v := mr.Spec.ForceOverwriteLabels; v != nil {
@@ -140,13 +143,29 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 			return reconcile.Result{}, err
 		}
 
-		for _, value := range secret.Data {
+		for key, value := range secret.Data {
 			var (
 				decoder    = yaml.NewYAMLOrJSONDecoder(bytes.NewReader(value), 1024)
 				decodedObj map[string]interface{}
 			)
 
-			for err := decoder.Decode(&decodedObj); err == nil; err = decoder.Decode(&decodedObj) {
+			for i := 0; true; i++ {
+				err := decoder.Decode(&decodedObj)
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					decodingError := &decodingError{
+						err:               err,
+						secret:            fmt.Sprintf("%s/%s", secret.Namespace, secret.Name),
+						secretKey:         key,
+						objectIndexInFile: i,
+					}
+					decodingErrors = append(decodingErrors, decodingError)
+					log.Error(decodingError.err, decodingError.StringShort())
+					continue
+				}
+
 				if decodedObj == nil {
 					continue
 				}
@@ -219,7 +238,11 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 		return ctrl.Result{}, err
 	}
 
-	conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionTrue, "ApplySucceeded", "All resources are applied.")
+	if len(decodingErrors) != 0 {
+		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, "DecodingFailed", fmt.Sprintf("Could not decode all new resources: %v", decodingErrors))
+	} else {
+		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionTrue, "ApplySucceeded", "All resources are applied.")
+	}
 	newConditions := resourcesv1alpha1helper.MergeConditions(mr.Status.Conditions, conditionResourcesApplied)
 	if err := tryUpdateManagedResourceStatus(r.ctx, r.client, mr, newConditions, newResourcesObjectReferences); err != nil {
 		log.Error(err, "Could not update the ManagedResource status")
@@ -485,4 +508,19 @@ type object struct {
 	oldInformation            resourcesv1alpha1.ObjectReference
 	forceOverwriteLabels      bool
 	forceOverwriteAnnotations bool
+}
+
+type decodingError struct {
+	err               error
+	secret            string
+	secretKey         string
+	objectIndexInFile int
+}
+
+func (d *decodingError) StringShort() string {
+	return fmt.Sprintf("Could not decode resource at index %d in '%s' in secret '%s'", d.objectIndexInFile, d.secretKey, d.secret)
+}
+
+func (d *decodingError) String() string {
+	return fmt.Sprintf("%s: %s.", d.StringShort(), d.err)
 }
