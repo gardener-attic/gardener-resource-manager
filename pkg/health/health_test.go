@@ -308,6 +308,18 @@ var _ = Describe("health", func() {
 					},
 				},
 			}, HaveOccurred()),
+			Entry("no healthy condition", v1alpha1.ManagedResource{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+				Status: v1alpha1.ManagedResourceStatus{
+					ObservedGeneration: 1,
+					Conditions: []v1alpha1.ManagedResourceCondition{
+						{
+							Type:   v1alpha1.ResourcesApplied,
+							Status: v1alpha1.ConditionTrue,
+						},
+					},
+				},
+			}, HaveOccurred()),
 			Entry("no conditions", v1alpha1.ManagedResource{
 				ObjectMeta: metav1.ObjectMeta{Generation: 1},
 				Status: v1alpha1.ManagedResourceStatus{
@@ -316,6 +328,110 @@ var _ = Describe("health", func() {
 			}, HaveOccurred()),
 			Entry("outdated generation", v1alpha1.ManagedResource{
 				ObjectMeta: metav1.ObjectMeta{Generation: 2},
+				Status: v1alpha1.ManagedResourceStatus{
+					ObservedGeneration: 1,
+				},
+			}, HaveOccurred()),
+			Entry("no status", v1alpha1.ManagedResource{
+				ObjectMeta: metav1.ObjectMeta{Generation: 2},
+			}, HaveOccurred()),
+		)
+	})
+
+	Context("CheckManagedResourceApplied", func() {
+		DescribeTable("managedresource",
+			func(mr v1alpha1.ManagedResource, matcher types.GomegaMatcher) {
+				err := health.CheckManagedResourceApplied(&mr)
+				Expect(err).To(matcher)
+			},
+			Entry("applied condition not true", v1alpha1.ManagedResource{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+				Status: v1alpha1.ManagedResourceStatus{
+					ObservedGeneration: 1,
+					Conditions: []v1alpha1.ManagedResourceCondition{
+						{
+							Type:   v1alpha1.ResourcesApplied,
+							Status: v1alpha1.ConditionFalse,
+						},
+					},
+				},
+			}, HaveOccurred()),
+			Entry("condition true", v1alpha1.ManagedResource{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+				Status: v1alpha1.ManagedResourceStatus{
+					ObservedGeneration: 1,
+					Conditions: []v1alpha1.ManagedResourceCondition{
+						{
+							Type:   v1alpha1.ResourcesApplied,
+							Status: v1alpha1.ConditionTrue,
+						},
+					},
+				},
+			}, Not(HaveOccurred())),
+			Entry("no applied condition", v1alpha1.ManagedResource{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+				Status: v1alpha1.ManagedResourceStatus{
+					ObservedGeneration: 1,
+					Conditions:         []v1alpha1.ManagedResourceCondition{},
+				},
+			}, HaveOccurred()),
+			Entry("no conditions", v1alpha1.ManagedResource{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+				Status: v1alpha1.ManagedResourceStatus{
+					ObservedGeneration: 1,
+				},
+			}, HaveOccurred()),
+			Entry("outdated generation", v1alpha1.ManagedResource{
+				ObjectMeta: metav1.ObjectMeta{Generation: 2},
+				Status: v1alpha1.ManagedResourceStatus{
+					ObservedGeneration: 1,
+				},
+			}, HaveOccurred()),
+			Entry("no status", v1alpha1.ManagedResource{
+				ObjectMeta: metav1.ObjectMeta{Generation: 2},
+			}, HaveOccurred()),
+		)
+	})
+
+	Context("CheckManagedResourceHealthy", func() {
+		DescribeTable("managedresource",
+			func(mr v1alpha1.ManagedResource, matcher types.GomegaMatcher) {
+				err := health.CheckManagedResourceHealthy(&mr)
+				Expect(err).To(matcher)
+			},
+			Entry("healthy condition not true", v1alpha1.ManagedResource{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+				Status: v1alpha1.ManagedResourceStatus{
+					ObservedGeneration: 1,
+					Conditions: []v1alpha1.ManagedResourceCondition{
+						{
+							Type:   v1alpha1.ResourcesHealthy,
+							Status: v1alpha1.ConditionFalse,
+						},
+					},
+				},
+			}, HaveOccurred()),
+			Entry("condition true", v1alpha1.ManagedResource{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+				Status: v1alpha1.ManagedResourceStatus{
+					ObservedGeneration: 1,
+					Conditions: []v1alpha1.ManagedResourceCondition{
+						{
+							Type:   v1alpha1.ResourcesHealthy,
+							Status: v1alpha1.ConditionTrue,
+						},
+					},
+				},
+			}, Not(HaveOccurred())),
+			Entry("no healthy condition", v1alpha1.ManagedResource{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
+				Status: v1alpha1.ManagedResourceStatus{
+					ObservedGeneration: 1,
+					Conditions:         []v1alpha1.ManagedResourceCondition{},
+				},
+			}, HaveOccurred()),
+			Entry("no conditions", v1alpha1.ManagedResource{
+				ObjectMeta: metav1.ObjectMeta{Generation: 1},
 				Status: v1alpha1.ManagedResourceStatus{
 					ObservedGeneration: 1,
 				},
