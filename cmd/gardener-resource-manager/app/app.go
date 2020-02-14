@@ -60,6 +60,7 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 	var (
 		leaderElection             bool
 		leaderElectionNamespace    string
+		cacheResyncPeriod          time.Duration
 		syncPeriod                 time.Duration
 		maxConcurrentWorkers       int
 		healthSyncPeriod           time.Duration
@@ -86,11 +87,12 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 			} else {
 				cfg = config.GetConfigOrDie()
 			}
+
 			mgr, err := manager.New(cfg, manager.Options{
 				LeaderElection:          leaderElection,
 				LeaderElectionID:        "gardener-resource-manager",
 				LeaderElectionNamespace: leaderElectionNamespace,
-				SyncPeriod:              &syncPeriod,
+				SyncPeriod:              &cacheResyncPeriod,
 				Namespace:               namespace,
 			})
 			if err != nil {
@@ -122,6 +124,11 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 				resourceClass = managedresources.DefaultClass
 			}
 			filter := managedresources.NewClassFilter(resourceClass)
+
+			entryLog.Info("Managed namespace: " + namespace)
+			entryLog.Info("Resource class: " + filter.ResourceClass())
+			entryLog.Info("Cache resync period " + cacheResyncPeriod.String())
+
 			c, err := controller.New("resource-controller", mgr, controller.Options{
 				MaxConcurrentReconciles: maxConcurrentWorkers,
 				Reconciler: managedresources.NewReconciler(
@@ -154,8 +161,6 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 				os.Exit(1)
 			}
 
-			entryLog.Info("Managed namespace: " + namespace)
-			entryLog.Info("Resource class: " + filter.ResourceClass())
 			entryLog.Info("Managed resource controller", "syncPeriod", syncPeriod.String())
 			entryLog.Info("Managed resource controller", "maxConcurrentWorkers", maxConcurrentWorkers)
 
@@ -209,6 +214,7 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 
 	cmd.Flags().BoolVar(&leaderElection, "leader-election", true, "enable or disable leader election")
 	cmd.Flags().StringVar(&leaderElectionNamespace, "leader-election-namespace", "", "namespace for leader election")
+	cmd.Flags().DurationVar(&cacheResyncPeriod, "cache-resync-period", 24*time.Hour, "duration how often the controller's cache is resynced")
 	cmd.Flags().DurationVar(&syncPeriod, "sync-period", time.Minute, "duration how often existing resources should be synced")
 	cmd.Flags().IntVar(&maxConcurrentWorkers, "max-concurrent-workers", 10, "number of worker threads for concurrent reconciliation of resources")
 	cmd.Flags().DurationVar(&healthSyncPeriod, "health-sync-period", time.Minute, "duration how often the health of existing resources should be synced")

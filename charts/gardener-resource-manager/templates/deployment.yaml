@@ -32,6 +32,9 @@ spec:
         - /gardener-resource-manager
         - --leader-election={{ .Values.leaderElection.enabled }}
         - --leader-election-namespace={{ .Release.Namespace }}
+        {{- if .Values.controllers.cacheResyncPeriod }}
+        - --cache-resync-period={{ .Values.controllers.cacheResyncPeriod }}
+        {{- end }}
         - --sync-period={{ .Values.controllers.managedResource.syncPeriod }}
         - --max-concurrent-workers={{ .Values.controllers.managedResource.concurrentSyncs }}
         - --health-sync-period={{ .Values.controllers.managedResourceHealth.syncPeriod }}
