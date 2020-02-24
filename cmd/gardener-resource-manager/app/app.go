@@ -138,6 +138,7 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 					targetClient,
 					targetRESTMapper,
 					filter,
+					syncPeriod,
 				),
 			})
 			if err != nil {

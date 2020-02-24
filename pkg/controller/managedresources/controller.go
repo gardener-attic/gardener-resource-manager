@@ -21,6 +21,7 @@ import (
 	"io"
 	"strconv"
 	"sync"
+	"time"
 
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
 	resourcesv1alpha1helper "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1/helper"
@@ -58,12 +59,13 @@ type Reconciler struct {
 	targetClient     client.Client
 	targetRESTMapper *restmapper.DeferredDiscoveryRESTMapper
 
-	class *ClassFilter
+	class      *ClassFilter
+	syncPeriod time.Duration
 }
 
 // NewReconciler creates a new reconciler with the given target client.
-func NewReconciler(ctx context.Context, log logr.Logger, c, targetClient client.Client, targetRESTMapper *restmapper.DeferredDiscoveryRESTMapper, class *ClassFilter) *Reconciler {
-	return &Reconciler{ctx, log, c, targetClient, targetRESTMapper, class}
+func NewReconciler(ctx context.Context, log logr.Logger, c, targetClient client.Client, targetRESTMapper *restmapper.DeferredDiscoveryRESTMapper, class *ClassFilter, syncPeriod time.Duration) *Reconciler {
+	return &Reconciler{ctx, log, c, targetClient, targetRESTMapper, class, syncPeriod}
 }
 
 // Reconcile implements `reconcile.Reconciler`.
@@ -250,7 +252,7 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 	}
 
 	log.Info("Finished to reconcile ManagedResource")
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: r.syncPeriod}, nil
 }
 
 func (r *Reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logger) (ctrl.Result, error) {
