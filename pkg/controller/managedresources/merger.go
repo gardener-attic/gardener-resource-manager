@@ -93,10 +93,15 @@ func mergeStatefulSet(scheme *runtime.Scheme, oldObj, newObj runtime.Object) err
 	return scheme.Convert(newStatefulSet, newObj, nil)
 }
 
+// mergeService merges new service into old service
 func mergeService(scheme *runtime.Scheme, oldObj, newObj runtime.Object) error {
 	oldService := &corev1.Service{}
 	if err := scheme.Convert(oldObj, oldService, nil); err != nil {
 		return err
+	}
+
+	if oldService.Spec.Type == "" {
+		oldService.Spec.Type = corev1.ServiceTypeClusterIP
 	}
 
 	newService := &corev1.Service{}
@@ -104,22 +109,47 @@ func mergeService(scheme *runtime.Scheme, oldObj, newObj runtime.Object) error {
 		return err
 	}
 
-	// We do not want to overwrite a Service's `.spec.clusterIP', `.spec.healthCheckNodePort` and '.spec.ports[*].nodePort' values.
-	newService.Spec.ClusterIP = oldService.Spec.ClusterIP
-	newService.Spec.HealthCheckNodePort = oldService.Spec.HealthCheckNodePort
-	var ports []corev1.ServicePort
-	for _, np := range newService.Spec.Ports {
-		p := np
-
-		for _, op := range oldService.Spec.Ports {
-			if np.Port == op.Port && op.NodePort != 0 {
-				p.NodePort = op.NodePort
-			}
-		}
-
-		ports = append(ports, p)
+	if newService.Spec.Type == "" {
+		newService.Spec.Type = corev1.ServiceTypeClusterIP
 	}
-	newService.Spec.Ports = ports
+
+	switch newService.Spec.Type {
+	case corev1.ServiceTypeLoadBalancer, corev1.ServiceTypeNodePort:
+		ports := []corev1.ServicePort{}
+
+		for _, np := range newService.Spec.Ports {
+			p := np
+
+			for _, op := range oldService.Spec.Ports {
+				if (np.Port == op.Port || np.Name == op.Name) && np.NodePort == 0 {
+					p.NodePort = op.NodePort
+				}
+			}
+
+			ports = append(ports, p)
+		}
+		newService.Spec.Ports = ports
+
+	case corev1.ServiceTypeExternalName:
+		// there is no ClusterIP in this case
+		return scheme.Convert(newService, newObj, nil)
+	}
+
+	// ClusterIP is immutable unless we want to transform the service into headless
+	// where ClusterIP = None or if the previous type of the service was ExternalName
+	// and the user wants to explicitly set an ClusterIP.
+	if newService.Spec.ClusterIP != corev1.ClusterIPNone &&
+		oldService.Spec.Type != corev1.ServiceTypeExternalName {
+		newService.Spec.ClusterIP = oldService.Spec.ClusterIP
+	}
+
+	if oldService.Spec.Type == corev1.ServiceTypeLoadBalancer &&
+		newService.Spec.Type == corev1.ServiceTypeLoadBalancer &&
+		newService.Spec.ExternalTrafficPolicy == corev1.ServiceExternalTrafficPolicyTypeLocal &&
+		oldService.Spec.ExternalTrafficPolicy == corev1.ServiceExternalTrafficPolicyTypeLocal &&
+		newService.Spec.HealthCheckNodePort == 0 {
+		newService.Spec.HealthCheckNodePort = oldService.Spec.HealthCheckNodePort
+	}
 
 	return scheme.Convert(newService, newObj, nil)
 }
