@@ -1,5 +1,5 @@
 #############      builder-base                             #############
-FROM golang:1.13.5 AS builder-base
+FROM golang:1.13.8 AS builder-base
 
 WORKDIR /go/src/github.com/gardener/gardener-resource-manager
 COPY . .
@@ -16,7 +16,7 @@ WORKDIR /go/src/github.com/gardener/gardener-resource-manager
 RUN make VERIFY=$VERIFY all
 
 #############      base                                     #############
-FROM alpine:3.10.3 AS base
+FROM alpine:3.11.3 AS base
 
 RUN apk add --update bash curl
 
