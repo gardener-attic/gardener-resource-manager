@@ -16,8 +16,10 @@ package managedresources
 
 import (
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 )
@@ -42,6 +44,8 @@ func merge(desired, current *unstructured.Unstructured, forceOverwriteLabels boo
 	switch current.GroupVersionKind().GroupKind() {
 	case appsv1.SchemeGroupVersion.WithKind("Deployment").GroupKind():
 		return mergeDeployment(scheme.Scheme, currentCopy, current)
+	case batchv1.SchemeGroupVersion.WithKind("Job").GroupKind():
+		return mergeJob(scheme.Scheme, currentCopy, current)
 	case appsv1.SchemeGroupVersion.WithKind("StatefulSet").GroupKind():
 		return mergeStatefulSet(scheme.Scheme, currentCopy, current)
 	case corev1.SchemeGroupVersion.WithKind("Service").GroupKind():
@@ -64,13 +68,36 @@ func mergeDeployment(scheme *runtime.Scheme, oldObj, newObj runtime.Object) erro
 		return err
 	}
 
-	// We do not want to overwrite a Deployment's `.spec.replicas' if the new deployments `.spec.replicas`
+	// Do not overwrite a Deployment's '.spec.replicas' if the new Deployment's '.spec.replicas'
 	// field is unset.
 	if newDeployment.Spec.Replicas == nil {
 		newDeployment.Spec.Replicas = oldDeployment.Spec.Replicas
 	}
 
 	return scheme.Convert(newDeployment, newObj, nil)
+}
+
+func mergeJob(scheme *runtime.Scheme, oldObj, newObj runtime.Object) error {
+	oldJob := &batchv1.Job{}
+	if err := scheme.Convert(oldObj, oldJob, nil); err != nil {
+		return err
+	}
+
+	newJob := &batchv1.Job{}
+	if err := scheme.Convert(newObj, newJob, nil); err != nil {
+		return err
+	}
+
+	// Do not overwrite a Job's '.spec.selector' if the new Jobs's '.spec.selector'
+	// field is unset.
+	if newJob.Spec.Selector == nil && oldJob.Spec.Selector != nil {
+		newJob.Spec.Selector = oldJob.Spec.Selector
+	}
+
+	// Do not overwrite Job managed labels as 'controller-uid' and 'job-name'. '.spec.template' is immutable.
+	newJob.Spec.Template.Labels = labels.Merge(oldJob.Spec.Template.Labels, newJob.Spec.Template.Labels)
+
+	return scheme.Convert(newJob, newObj, nil)
 }
 
 func mergeStatefulSet(scheme *runtime.Scheme, oldObj, newObj runtime.Object) error {
@@ -84,7 +111,7 @@ func mergeStatefulSet(scheme *runtime.Scheme, oldObj, newObj runtime.Object) err
 		return err
 	}
 
-	// We do not want to overwrite a StatefulSet's `.spec.replicas' if the new deployments `.spec.replicas`
+	// Do not overwrite a StatefulSet's '.spec.replicas' if the new StatefulSet's `.spec.replicas'
 	// field is unset.
 	if newStatefulSet.Spec.Replicas == nil {
 		newStatefulSet.Spec.Replicas = oldStatefulSet.Spec.Replicas
@@ -135,7 +162,7 @@ func mergeServiceAccount(scheme *runtime.Scheme, oldObj, newObj runtime.Object) 
 		return err
 	}
 
-	// We do not want to overwrite a ServiceAccount's `.secrets[]` list or `.imagePullSecrets[]`.
+	// Do not overwrite a ServiceAccount's '.secrets[]' list or '.imagePullSecrets[]'.
 	newServiceAccount.Secrets = oldServiceAccount.Secrets
 	newServiceAccount.ImagePullSecrets = oldServiceAccount.ImagePullSecrets
 
