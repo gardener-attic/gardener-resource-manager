@@ -15,6 +15,7 @@
 package managedresources
 
 import (
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,96 +26,221 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("#MergeService", func() {
-	var (
-		old, new, expected *corev1.Service
-		s                  *runtime.Scheme
-	)
+var _ = Describe("merger", func() {
 
-	BeforeEach(func() {
-		s = runtime.NewScheme()
-		Expect(corev1.AddToScheme(s)).ToNot(HaveOccurred(), "schema add should succeed")
+	Describe("#mergeJob", func() {
+		var (
+			old, new *batchv1.Job
+			s        *runtime.Scheme
+		)
 
-		old = &corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{},
-			Spec: corev1.ServiceSpec{
-				ClusterIP: "1.2.3.4",
-				Ports: []corev1.ServicePort{
-					{
-						Name:       "foo",
-						Protocol:   corev1.ProtocolTCP,
-						Port:       123,
-						TargetPort: intstr.FromInt(919),
+		BeforeEach(func() {
+			s = runtime.NewScheme()
+			Expect(batchv1.AddToScheme(s)).ToNot(HaveOccurred(), "schema add should succeed")
+
+			old = &batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{},
+				Spec: batchv1.JobSpec{
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"controller-uid": "1a2b3c"},
+					},
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: map[string]string{"controller-uid": "1a2b3c", "job-name": "pi"},
+						},
 					},
 				},
-				Type:            corev1.ServiceTypeClusterIP,
-				SessionAffinity: corev1.ServiceAffinityNone,
-				Selector:        map[string]string{"foo": "bar"},
-			},
-		}
+			}
 
-		new = old.DeepCopy()
-		expected = old.DeepCopy()
+			new = old.DeepCopy()
+		})
+
+		It("should not overwrite old .spec.selector if the new one is nil", func() {
+			new.Spec.Selector = nil
+
+			expected := old.DeepCopy()
+
+			Expect(mergeJob(s, old, new)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(new).To(Equal(expected))
+		})
+
+		It("should not overwrite old .spec.template.labels if the new one is nil", func() {
+			new.Spec.Template.Labels = nil
+
+			expected := old.DeepCopy()
+
+			Expect(mergeJob(s, old, new)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(new).To(Equal(expected))
+		})
+
+		It("should be able to merge new .spec.template.labels with the old ones", func() {
+			new.Spec.Template.Labels = map[string]string{"app": "myapp", "version": "v0.1.0"}
+
+			expected := old.DeepCopy()
+			expected.Spec.Template.Labels = map[string]string{
+				"app":            "myapp",
+				"controller-uid": "1a2b3c",
+				"job-name":       "pi",
+				"version":        "v0.1.0",
+			}
+
+			Expect(mergeJob(s, old, new)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(new).To(Equal(expected))
+		})
 	})
 
-	DescribeTable("ClusterIP to", func(mutator func()) {
-		mutator()
-		Expect(mergeService(s, old, new)).NotTo(HaveOccurred(), "merge should be successful")
-		Expect(new).To(Equal(expected))
-	},
-		Entry("ClusterIP with changed ports", func() {
-			new.Spec.Ports[0].Port = 1234
-			new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
-			new.Spec.Ports[0].TargetPort = intstr.FromInt(989)
+	Describe("#mergeService", func() {
+		var (
+			old, new, expected *corev1.Service
+			s                  *runtime.Scheme
+		)
 
-			expected = new.DeepCopy()
-			new.Spec.ClusterIP = ""
-		}),
-		Entry("ClusterIP with changed ClusterIP, should not update it", func() {
-			new.Spec.ClusterIP = "5.6.7.8"
-		}),
-		Entry("Headless ClusterIP", func() {
-			new.Spec.ClusterIP = "None"
-			expected.Spec.ClusterIP = "None"
-		}),
-		Entry("ClusterIP without passing any type", func() {
-			new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
-			new.Spec.Ports[0].Port = 999
-			new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
+		BeforeEach(func() {
+			s = runtime.NewScheme()
+			Expect(corev1.AddToScheme(s)).ToNot(HaveOccurred(), "schema add should succeed")
 
-			expected = new.DeepCopy()
-			new.Spec.ClusterIP = "5.6.7.8"
-			new.Spec.Type = ""
-		}),
-		Entry("NodePort with changed ports", func() {
-			new.Spec.Type = corev1.ServiceTypeNodePort
-			new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
-			new.Spec.Ports[0].Port = 999
-			new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
-			new.Spec.Ports[0].NodePort = 444
+			old = &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{},
+				Spec: corev1.ServiceSpec{
+					ClusterIP: "1.2.3.4",
+					Ports: []corev1.ServicePort{
+						{
+							Name:       "foo",
+							Protocol:   corev1.ProtocolTCP,
+							Port:       123,
+							TargetPort: intstr.FromInt(919),
+						},
+					},
+					Type:            corev1.ServiceTypeClusterIP,
+					SessionAffinity: corev1.ServiceAffinityNone,
+					Selector:        map[string]string{"foo": "bar"},
+				},
+			}
 
-			expected = new.DeepCopy()
-		}),
+			new = old.DeepCopy()
+			expected = old.DeepCopy()
+		})
 
-		Entry("ExternalName removes ClusterIP", func() {
-			new.Spec.Type = corev1.ServiceTypeExternalName
-			new.Spec.Selector = nil
-			new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
-			new.Spec.Ports[0].Port = 999
-			new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
-			new.Spec.Ports[0].NodePort = 0
-			new.Spec.ClusterIP = ""
-			new.Spec.ExternalName = "foo.com"
-			new.Spec.HealthCheckNodePort = 0
+		DescribeTable("ClusterIP to", func(mutator func()) {
+			mutator()
+			Expect(mergeService(s, old, new)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(new).To(Equal(expected))
+		},
+			Entry("ClusterIP with changed ports", func() {
+				new.Spec.Ports[0].Port = 1234
+				new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
+				new.Spec.Ports[0].TargetPort = intstr.FromInt(989)
 
-			expected = new.DeepCopy()
-		}),
-	)
+				expected = new.DeepCopy()
+				new.Spec.ClusterIP = ""
+			}),
+			Entry("ClusterIP with changed ClusterIP, should not update it", func() {
+				new.Spec.ClusterIP = "5.6.7.8"
+			}),
+			Entry("Headless ClusterIP", func() {
+				new.Spec.ClusterIP = "None"
+				expected.Spec.ClusterIP = "None"
+			}),
+			Entry("ClusterIP without passing any type", func() {
+				new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
+				new.Spec.Ports[0].Port = 999
+				new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
 
-	DescribeTable("NodePort to",
-		func(mutator func()) {
+				expected = new.DeepCopy()
+				new.Spec.ClusterIP = "5.6.7.8"
+				new.Spec.Type = ""
+			}),
+			Entry("NodePort with changed ports", func() {
+				new.Spec.Type = corev1.ServiceTypeNodePort
+				new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
+				new.Spec.Ports[0].Port = 999
+				new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
+				new.Spec.Ports[0].NodePort = 444
+
+				expected = new.DeepCopy()
+			}),
+
+			Entry("ExternalName removes ClusterIP", func() {
+				new.Spec.Type = corev1.ServiceTypeExternalName
+				new.Spec.Selector = nil
+				new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
+				new.Spec.Ports[0].Port = 999
+				new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
+				new.Spec.Ports[0].NodePort = 0
+				new.Spec.ClusterIP = ""
+				new.Spec.ExternalName = "foo.com"
+				new.Spec.HealthCheckNodePort = 0
+
+				expected = new.DeepCopy()
+			}),
+		)
+
+		DescribeTable("NodePort to",
+			func(mutator func()) {
+				old.Spec.Ports[0].NodePort = 3333
+				old.Spec.Type = corev1.ServiceTypeNodePort
+
+				new = old.DeepCopy()
+				expected = old.DeepCopy()
+
+				mutator()
+
+				Expect(mergeService(s, old, new)).NotTo(HaveOccurred(), "merge should be successful")
+				Expect(new).To(Equal(expected))
+			},
+			Entry("ClusterIP with changed ports", func() {
+				new.Spec.Type = corev1.ServiceTypeClusterIP
+				new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
+				new.Spec.Ports[0].Port = 999
+				new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
+				new.Spec.Ports[0].NodePort = 0
+
+				expected = new.DeepCopy()
+			}),
+			Entry("ClusterIP with changed ClusterIP", func() {
+				new.Spec.ClusterIP = "5.6.7.8"
+			}),
+			Entry("Headless ClusterIP type service", func() {
+				new.Spec.Type = corev1.ServiceTypeClusterIP
+				new.Spec.ClusterIP = "None"
+
+				expected = new.DeepCopy()
+			}),
+
+			Entry("NodePort with changed ports", func() {
+				new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
+				new.Spec.Ports[0].Port = 999
+				new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
+				new.Spec.Ports[0].NodePort = 444
+
+				expected = new.DeepCopy()
+			}),
+			Entry("NodePort with changed ports and without nodePort", func() {
+				new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
+				new.Spec.Ports[0].Port = 999
+				new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
+
+				expected = new.DeepCopy()
+				new.Spec.Ports[0].NodePort = 0
+			}),
+			Entry("ExternalName removes ClusterIP", func() {
+				new.Spec.Type = corev1.ServiceTypeExternalName
+				new.Spec.Selector = nil
+				new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
+				new.Spec.Ports[0].Port = 999
+				new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
+				new.Spec.Ports[0].NodePort = 0
+				new.Spec.ClusterIP = ""
+				new.Spec.ExternalName = "foo.com"
+				new.Spec.HealthCheckNodePort = 0
+
+				expected = new.DeepCopy()
+			}),
+		)
+
+		DescribeTable("LoadBalancer to", func(mutator func()) {
 			old.Spec.Ports[0].NodePort = 3333
-			old.Spec.Type = corev1.ServiceTypeNodePort
+			old.Spec.Type = corev1.ServiceTypeLoadBalancer
 
 			new = old.DeepCopy()
 			expected = old.DeepCopy()
@@ -124,179 +250,117 @@ var _ = Describe("#MergeService", func() {
 			Expect(mergeService(s, old, new)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(new).To(Equal(expected))
 		},
-		Entry("ClusterIP with changed ports", func() {
-			new.Spec.Type = corev1.ServiceTypeClusterIP
-			new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
-			new.Spec.Ports[0].Port = 999
-			new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
-			new.Spec.Ports[0].NodePort = 0
+			Entry("ClusterIP with changed ports", func() {
+				new.Spec.Type = corev1.ServiceTypeClusterIP
+				new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
+				new.Spec.Ports[0].Port = 999
+				new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
+				new.Spec.Ports[0].NodePort = 0
 
-			expected = new.DeepCopy()
-		}),
-		Entry("ClusterIP with changed ClusterIP", func() {
-			new.Spec.ClusterIP = "5.6.7.8"
-		}),
-		Entry("Headless ClusterIP type service", func() {
-			new.Spec.Type = corev1.ServiceTypeClusterIP
-			new.Spec.ClusterIP = "None"
+				expected = new.DeepCopy()
+			}),
+			Entry("Cluster with ClusterIP changed", func() {
+				new.Spec.ClusterIP = "5.6.7.8"
+			}),
+			Entry("Headless ClusterIP type service", func() {
+				new.Spec.Type = corev1.ServiceTypeClusterIP
+				new.Spec.ClusterIP = "None"
 
-			expected = new.DeepCopy()
-		}),
+				expected = new.DeepCopy()
+			}),
+			Entry("NodePort with changed ports", func() {
+				new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
+				new.Spec.Ports[0].Port = 999
+				new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
+				new.Spec.Ports[0].NodePort = 444
 
-		Entry("NodePort with changed ports", func() {
-			new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
-			new.Spec.Ports[0].Port = 999
-			new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
-			new.Spec.Ports[0].NodePort = 444
+				expected = new.DeepCopy()
+			}),
+			Entry("NodePort with changed ports and without nodePort", func() {
+				new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
+				new.Spec.Ports[0].Port = 999
+				new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
 
-			expected = new.DeepCopy()
-		}),
-		Entry("NodePort with changed ports and without nodePort", func() {
-			new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
-			new.Spec.Ports[0].Port = 999
-			new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
+				expected = new.DeepCopy()
+				new.Spec.Ports[0].NodePort = 0
+			}),
+			Entry("ExternalName removes ClusterIP", func() {
+				new.Spec.Type = corev1.ServiceTypeExternalName
+				new.Spec.Selector = nil
+				new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
+				new.Spec.Ports[0].Port = 999
+				new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
+				new.Spec.Ports[0].NodePort = 0
+				new.Spec.ClusterIP = ""
+				new.Spec.ExternalName = "foo.com"
+				new.Spec.HealthCheckNodePort = 0
 
-			expected = new.DeepCopy()
-			new.Spec.Ports[0].NodePort = 0
-		}),
-		Entry("ExternalName removes ClusterIP", func() {
-			new.Spec.Type = corev1.ServiceTypeExternalName
-			new.Spec.Selector = nil
-			new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
-			new.Spec.Ports[0].Port = 999
-			new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
-			new.Spec.Ports[0].NodePort = 0
-			new.Spec.ClusterIP = ""
-			new.Spec.ExternalName = "foo.com"
-			new.Spec.HealthCheckNodePort = 0
+				expected = new.DeepCopy()
+			}),
+			Entry("LoadBalancer with ExternalTrafficPolicy=Local and HealthCheckNodePort", func() {
+				new.Spec.HealthCheckNodePort = 123
+				new.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
 
-			expected = new.DeepCopy()
-		}),
-	)
+				expected = new.DeepCopy()
+			}),
+			Entry("LoadBalancer with ExternalTrafficPolicy=Local and no HealthCheckNodePort", func() {
+				old.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
+				old.Spec.HealthCheckNodePort = 3333
 
-	DescribeTable("LoadBalancer to", func(mutator func()) {
-		old.Spec.Ports[0].NodePort = 3333
-		old.Spec.Type = corev1.ServiceTypeLoadBalancer
+				new.Spec.HealthCheckNodePort = 0
+				new.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
 
-		new = old.DeepCopy()
-		expected = old.DeepCopy()
+				expected = old.DeepCopy()
+			}),
+		)
 
-		mutator()
+		DescribeTable("ExternalName to", func(mutator func()) {
+			old.Spec.Ports[0].NodePort = 0
+			old.Spec.Type = corev1.ServiceTypeExternalName
+			old.Spec.HealthCheckNodePort = 0
+			old.Spec.ClusterIP = ""
+			old.Spec.ExternalName = "baz.bar"
+			old.Spec.Selector = nil
 
-		Expect(mergeService(s, old, new)).NotTo(HaveOccurred(), "merge should be successful")
-		Expect(new).To(Equal(expected))
-	},
-		Entry("ClusterIP with changed ports", func() {
-			new.Spec.Type = corev1.ServiceTypeClusterIP
-			new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
-			new.Spec.Ports[0].Port = 999
-			new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
-			new.Spec.Ports[0].NodePort = 0
-
-			expected = new.DeepCopy()
-		}),
-		Entry("Cluster with ClusterIP changed", func() {
-			new.Spec.ClusterIP = "5.6.7.8"
-		}),
-		Entry("Headless ClusterIP type service", func() {
-			new.Spec.Type = corev1.ServiceTypeClusterIP
-			new.Spec.ClusterIP = "None"
-
-			expected = new.DeepCopy()
-		}),
-		Entry("NodePort with changed ports", func() {
-			new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
-			new.Spec.Ports[0].Port = 999
-			new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
-			new.Spec.Ports[0].NodePort = 444
-
-			expected = new.DeepCopy()
-		}),
-		Entry("NodePort with changed ports and without nodePort", func() {
-			new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
-			new.Spec.Ports[0].Port = 999
-			new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
-
-			expected = new.DeepCopy()
-			new.Spec.Ports[0].NodePort = 0
-		}),
-		Entry("ExternalName removes ClusterIP", func() {
-			new.Spec.Type = corev1.ServiceTypeExternalName
-			new.Spec.Selector = nil
-			new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
-			new.Spec.Ports[0].Port = 999
-			new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
-			new.Spec.Ports[0].NodePort = 0
-			new.Spec.ClusterIP = ""
-			new.Spec.ExternalName = "foo.com"
-			new.Spec.HealthCheckNodePort = 0
-
-			expected = new.DeepCopy()
-		}),
-		Entry("LoadBalancer with ExternalTrafficPolicy=Local and HealthCheckNodePort", func() {
-			new.Spec.HealthCheckNodePort = 123
-			new.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
-
-			expected = new.DeepCopy()
-		}),
-		Entry("LoadBalancer with ExternalTrafficPolicy=Local and no HealthCheckNodePort", func() {
-			old.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
-			old.Spec.HealthCheckNodePort = 3333
-
-			new.Spec.HealthCheckNodePort = 0
-			new.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
-
+			new = old.DeepCopy()
 			expected = old.DeepCopy()
-		}),
-	)
 
-	DescribeTable("ExternalName to", func(mutator func()) {
-		old.Spec.Ports[0].NodePort = 0
-		old.Spec.Type = corev1.ServiceTypeExternalName
-		old.Spec.HealthCheckNodePort = 0
-		old.Spec.ClusterIP = ""
-		old.Spec.ExternalName = "baz.bar"
-		old.Spec.Selector = nil
+			mutator()
 
-		new = old.DeepCopy()
-		expected = old.DeepCopy()
+			Expect(mergeService(s, old, new)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(new).To(Equal(expected))
+		},
+			Entry("ClusterIP with changed ports", func() {
+				new.Spec.Type = corev1.ServiceTypeClusterIP
+				new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
+				new.Spec.Ports[0].Port = 999
+				new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
+				new.Spec.Ports[0].NodePort = 0
+				new.Spec.ExternalName = ""
+				new.Spec.ClusterIP = "3.4.5.6"
 
-		mutator()
+				expected = new.DeepCopy()
+			}),
+			Entry("NodePort with changed ports", func() {
+				new.Spec.Type = corev1.ServiceTypeNodePort
+				new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
+				new.Spec.Ports[0].Port = 999
+				new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
+				new.Spec.Ports[0].NodePort = 444
+				new.Spec.ExternalName = ""
+				new.Spec.ClusterIP = "3.4.5.6"
 
-		Expect(mergeService(s, old, new)).NotTo(HaveOccurred(), "merge should be successful")
-		Expect(new).To(Equal(expected))
-	},
-		Entry("ClusterIP with changed ports", func() {
-			new.Spec.Type = corev1.ServiceTypeClusterIP
-			new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
-			new.Spec.Ports[0].Port = 999
-			new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
-			new.Spec.Ports[0].NodePort = 0
-			new.Spec.ExternalName = ""
-			new.Spec.ClusterIP = "3.4.5.6"
+				expected = new.DeepCopy()
+			}),
+			Entry("LoadBalancer with ExternalTrafficPolicy=Local and HealthCheckNodePort", func() {
+				new.Spec.Type = corev1.ServiceTypeLoadBalancer
+				new.Spec.HealthCheckNodePort = 123
+				new.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
+				new.Spec.ExternalName = ""
+				new.Spec.ClusterIP = "3.4.5.6"
 
-			expected = new.DeepCopy()
-		}),
-		Entry("NodePort with changed ports", func() {
-			new.Spec.Type = corev1.ServiceTypeNodePort
-			new.Spec.Ports[0].Protocol = corev1.ProtocolUDP
-			new.Spec.Ports[0].Port = 999
-			new.Spec.Ports[0].TargetPort = intstr.FromInt(888)
-			new.Spec.Ports[0].NodePort = 444
-			new.Spec.ExternalName = ""
-			new.Spec.ClusterIP = "3.4.5.6"
-
-			expected = new.DeepCopy()
-		}),
-		Entry("LoadBalancer with ExternalTrafficPolicy=Local and HealthCheckNodePort", func() {
-			new.Spec.Type = corev1.ServiceTypeLoadBalancer
-			new.Spec.HealthCheckNodePort = 123
-			new.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
-			new.Spec.ExternalName = ""
-			new.Spec.ClusterIP = "3.4.5.6"
-
-			expected = new.DeepCopy()
-		}),
-	)
-
+				expected = new.DeepCopy()
+			}),
+		)
+	})
 })
