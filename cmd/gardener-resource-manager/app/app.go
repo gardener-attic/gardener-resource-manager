@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"sync"
 	"time"
 
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
@@ -28,16 +29,21 @@ import (
 	logpkg "github.com/gardener/gardener-resource-manager/pkg/log"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/discovery"
 	memcache "k8s.io/client-go/discovery/cached/memory"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/workqueue"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -53,7 +59,7 @@ import (
 var log = runtimelog.Log.WithName("gardener-resource-manager")
 
 // NewControllerManagerCommand creates a new command for running a gardener resource manager controllers.
-func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
+func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 	runtimelog.SetLogger(logpkg.ZapLogger(false))
 	entryLog := log.WithName("entrypoint")
 
@@ -61,6 +67,7 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 		leaderElection             bool
 		leaderElectionNamespace    string
 		cacheResyncPeriod          time.Duration
+		targetCacheResyncPeriod    time.Duration
 		syncPeriod                 time.Duration
 		maxConcurrentWorkers       int
 		healthSyncPeriod           time.Duration
@@ -74,14 +81,21 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "gardener-resource-manager",
 
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, cancel := context.WithCancel(parentCtx)
+			defer cancel()
+
+			entryLog.Info("Starting gardener-resource-manager...")
+			cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+				entryLog.Info(fmt.Sprintf("FLAG: --%s=%s", flag.Name, flag.Value))
+			})
+
 			var cfg *rest.Config
 			var err error
 			if kubeconfigPath != "" {
 				cfg, err = clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 				if err != nil {
-					entryLog.Error(err, "could not instantiate rest config")
-					os.Exit(1)
+					return fmt.Errorf("could not instantiate rest config: %+v", err)
 				}
 				entryLog.Info("using kubeconfig " + kubeconfigPath)
 			} else {
@@ -96,28 +110,41 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 				Namespace:               namespace,
 			})
 			if err != nil {
-				entryLog.Error(err, "could not instantiate manager")
-				os.Exit(1)
+				return fmt.Errorf("could not instantiate manager: %+v", err)
 			}
 
 			utilruntime.Must(resourcesv1alpha1.AddToScheme(mgr.GetScheme()))
 
+			targetScheme := runtime.NewScheme()
+			utilruntime.Must(scheme.AddToScheme(targetScheme)) // add most of the standard k8s APIs
+			utilruntime.Must(apiextensionsv1beta1.AddToScheme(targetScheme))
+			utilruntime.Must(apiextensionsv1.AddToScheme(targetScheme))
+
 			targetConfig, err := getTargetConfig(targetKubeconfigPath)
 			if err != nil {
-				entryLog.Error(err, "unable to create REST config for target cluster")
-				os.Exit(1)
+				return fmt.Errorf("unable to create REST config for target cluster: %+v", err)
 			}
 
 			targetRESTMapper, err := getTargetRESTMapper(targetConfig)
 			if err != nil {
-				entryLog.Error(err, "unable to create REST mapper for target cluster")
-				os.Exit(1)
+				return fmt.Errorf("unable to create REST mapper for target cluster: %+v", err)
 			}
 
-			targetClient, err := getTargetClient(*targetConfig, targetRESTMapper)
+			targetCache, err := getTargetCache(targetConfig, cache.Options{
+				Mapper: targetRESTMapper,
+				Resync: &targetCacheResyncPeriod,
+				Scheme: targetScheme,
+			})
 			if err != nil {
-				entryLog.Error(err, "unable to create client for target cluster")
-				os.Exit(1)
+				return fmt.Errorf("unable to create client cache for target cluster: %+v", err)
+			}
+
+			targetClient, err := getTargetClient(targetCache, *targetConfig, client.Options{
+				Mapper: targetRESTMapper,
+				Scheme: targetScheme,
+			})
+			if err != nil {
+				return fmt.Errorf("unable to create client for target cluster: %+v", err)
 			}
 
 			if resourceClass == "" {
@@ -142,8 +169,7 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 				),
 			})
 			if err != nil {
-				entryLog.Error(err, "unable to set up individual controller")
-				os.Exit(1)
+				return fmt.Errorf("unable to set up individual controller: %+v", err)
 			}
 
 			if err := c.Watch(
@@ -151,15 +177,13 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 				&handler.EnqueueRequestForObject{},
 				filter, predicate.GenerationChangedPredicate{},
 			); err != nil {
-				entryLog.Error(err, "unable to watch ManagedResources")
-				os.Exit(1)
+				return fmt.Errorf("unable to watch ManagedResources: %+v", err)
 			}
 			if err := c.Watch(
 				&source.Kind{Type: &corev1.Secret{}},
 				&handler.EnqueueRequestsFromMapFunc{ToRequests: managedresources.SecretToManagedResourceMapper(mgr.GetClient(), filter)},
 			); err != nil {
-				entryLog.Error(err, "unable to watch Secrets mapping to ManagedResources")
-				os.Exit(1)
+				return fmt.Errorf("unable to watch Secrets mapping to ManagedResources: %+v", err)
 			}
 
 			entryLog.Info("Managed resource controller", "syncPeriod", syncPeriod.String())
@@ -172,13 +196,13 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 					log.WithName("health-reconciler"),
 					mgr.GetClient(),
 					targetClient,
+					targetScheme,
 					filter,
 					healthSyncPeriod,
 				),
 			})
 			if err != nil {
-				entryLog.Error(err, "unable to set up individual controller")
-				os.Exit(1)
+				return fmt.Errorf("unable to set up individual controller: %+v", err)
 			}
 
 			if err := healthController.Watch(
@@ -199,16 +223,46 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 				},
 				filter, health.ClassChangedPredicate(),
 			); err != nil {
-				entryLog.Error(err, "unable to watch ManagedResources")
-				os.Exit(1)
+				return fmt.Errorf("unable to watch ManagedResources: %+v", err)
 			}
 
 			entryLog.Info("Managed resource health controller", "syncPeriod", healthSyncPeriod.String())
 			entryLog.Info("Managed resource health controller", "maxConcurrentWorkers", healthMaxConcurrentWorkers)
 
-			if err := mgr.Start(ctx.Done()); err != nil {
-				entryLog.Error(err, "error running manager")
-				os.Exit(1)
+			var wg sync.WaitGroup
+			errChan := make(chan error)
+
+			// start the target cache and exit if there was an error
+			go func() {
+				defer wg.Done()
+
+				wg.Add(1)
+				if err := targetCache.Start(ctx.Done()); err != nil {
+					errChan <- fmt.Errorf("error syncing target cache: %+v", err)
+				}
+			}()
+
+			targetCache.WaitForCacheSync(ctx.Done())
+
+			go func() {
+				defer wg.Done()
+
+				wg.Add(1)
+				if err := mgr.Start(ctx.Done()); err != nil {
+					errChan <- fmt.Errorf("error running manager: %+v", err)
+				}
+			}()
+
+			select {
+			case err := <-errChan:
+				cancel()
+				wg.Wait()
+				return err
+
+			case <-parentCtx.Done():
+				wg.Wait()
+				entryLog.Info("Stop signal received, shutting down.")
+				return nil
 			}
 		},
 	}
@@ -217,6 +271,7 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 	cmd.Flags().StringVar(&leaderElectionNamespace, "leader-election-namespace", "", "namespace for leader election")
 	cmd.Flags().DurationVar(&cacheResyncPeriod, "cache-resync-period", 24*time.Hour, "duration how often the controller's cache is resynced")
 	cmd.Flags().DurationVar(&syncPeriod, "sync-period", time.Minute, "duration how often existing resources should be synced")
+	cmd.Flags().DurationVar(&targetCacheResyncPeriod, "target-cache-resync-period", 24*time.Hour, "duration how often the controller's cache for the target cluster is resynced")
 	cmd.Flags().IntVar(&maxConcurrentWorkers, "max-concurrent-workers", 10, "number of worker threads for concurrent reconciliation of resources")
 	cmd.Flags().DurationVar(&healthSyncPeriod, "health-sync-period", time.Minute, "duration how often the health of existing resources should be synced")
 	cmd.Flags().IntVar(&healthMaxConcurrentWorkers, "health-max-concurrent-workers", 10, "number of worker threads for concurrent health reconciliation of resources")
@@ -254,11 +309,26 @@ func getTargetConfig(kubeconfigPath string) (*rest.Config, error) {
 	return nil, fmt.Errorf("could not create config for cluster")
 }
 
-func getTargetClient(config rest.Config, restMapper meta.RESTMapper) (client.Client, error) {
+func getTargetCache(config *rest.Config, options cache.Options) (cache.Cache, error) {
+	return cache.New(config, options)
+}
+
+func getTargetClient(cache cache.Cache, config rest.Config, options client.Options) (client.Client, error) {
 	config.QPS = 100.0
 	config.Burst = 130
 
-	return client.New(&config, client.Options{
-		Mapper: restMapper,
-	})
+	// Create the Client for Write operations.
+	c, err := client.New(&config, options)
+	if err != nil {
+		return nil, err
+	}
+
+	return &client.DelegatingClient{
+		Reader: &client.DelegatingReader{
+			CacheReader:  cache,
+			ClientReader: c,
+		},
+		Writer:       c,
+		StatusClient: c,
+	}, nil
 }

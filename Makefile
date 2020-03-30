@@ -17,7 +17,7 @@ IMAGE_PREFIX                := $(REGISTRY)/gardener
 REPO_ROOT                   := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 HACK_DIR                    := $(REPO_ROOT)/hack
 VERSION                     := $(shell cat VERSION)
-LD_FLAGS                    := "-w -X github.com/gardener/gardener-resource-manager/pkg/version.Version=$(IMAGE_TAG)"
+LD_FLAGS                    := "-w -X github.com/gardener/gardener-resource-manager/pkg/version.Version=$(VERSION)"
 VERIFY                      := true
 
 ### Build commands
