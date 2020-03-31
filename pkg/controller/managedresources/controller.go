@@ -340,6 +340,12 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 						// has been merged and released.
 						r.targetRESTMapper.Reset()
 					}
+					if apierrors.IsConflict(err) {
+						r.log.Info(fmt.Sprintf("conflict during apply of object %q: %s", resource, err))
+						// return conflict error directly, so that the update will be retried
+						return err
+					}
+
 					return fmt.Errorf("error during apply of object %q: %s", resource, err)
 				}
 				return nil
