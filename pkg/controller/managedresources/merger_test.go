@@ -18,6 +18,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -27,6 +28,87 @@ import (
 )
 
 var _ = Describe("merger", func() {
+
+	Describe("#merge", func() {
+		var (
+			current, desired *unstructured.Unstructured
+			s                *runtime.Scheme
+		)
+
+		BeforeEach(func() {
+			s = runtime.NewScheme()
+			Expect(batchv1.AddToScheme(s)).ToNot(HaveOccurred(), "schema add should succeed")
+
+			oldPod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					ResourceVersion: "foo",
+					Finalizers:      []string{"finalizer"},
+				},
+			}
+
+			oldJSON, err := runtime.DefaultUnstructuredConverter.ToUnstructured(oldPod)
+			Expect(err).NotTo(HaveOccurred())
+			current = &unstructured.Unstructured{
+				Object: oldJSON,
+			}
+
+			desired = current.DeepCopy()
+		})
+
+		It("should not overwrite current .metadata.resourceVersion", func() {
+			desired.SetResourceVersion("")
+
+			expected := current.DeepCopy()
+
+			Expect(merge(desired, current, false, nil, false, nil)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(current.GetResourceVersion()).To(Equal(expected.GetResourceVersion()))
+		})
+
+		It("should not overwrite current .metadata.finalizers", func() {
+			desired.SetFinalizers([]string{})
+
+			expected := current.DeepCopy()
+
+			Expect(merge(desired, current, false, nil, false, nil)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(current.GetFinalizers()).To(Equal(expected.GetFinalizers()))
+		})
+
+		It("should keep current .status if it is not empty", func() {
+			current.Object["status"] = map[string]interface{}{
+				"podIP": "1.1.1.1",
+			}
+			desired.Object["status"] = map[string]interface{}{
+				"podIP": "2.2.2.2",
+			}
+
+			expected := current.DeepCopy()
+
+			Expect(merge(desired, current, false, nil, false, nil)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(current.Object["status"]).To(Equal(expected.Object["status"]))
+		})
+
+		It("should discard .status if current .status is empty", func() {
+			desired.Object["status"] = map[string]interface{}{
+				"podIP": "2.2.2.2",
+			}
+
+			current.Object["status"] = map[string]interface{}{}
+
+			Expect(merge(desired, current, false, nil, false, nil)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(current.Object["status"]).To(BeNil())
+		})
+
+		It("should discard .status if current .status is not set", func() {
+			desired.Object["status"] = map[string]interface{}{
+				"podIP": "2.2.2.2",
+			}
+
+			delete(current.Object, "status")
+
+			Expect(merge(desired, current, false, nil, false, nil)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(current.Object["status"]).To(BeNil())
+		})
+	})
 
 	Describe("#mergeJob", func() {
 		var (

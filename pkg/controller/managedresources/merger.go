@@ -24,34 +24,57 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
+// merge merges the values of the `desired` object into the `current` object while preserving `current`'s important
+// metadata (like resourceVersion and finalizers), status and selected spec fields of the respective kind (e.g.
+// .spec.selector of a Job).
 func merge(desired, current *unstructured.Unstructured, forceOverwriteLabels bool, existingLabels map[string]string, forceOverwriteAnnotations bool, existingAnnotations map[string]string) error {
-	currentCopy := current.DeepCopy()
+	// save copy of current object before merging
+	oldObject := current.DeepCopy()
 
-	desired.DeepCopyInto(current)
-	current.SetResourceVersion(currentCopy.GetResourceVersion())
-	current.SetFinalizers(currentCopy.GetFinalizers())
+	// copy desired state into new object
+	newObject := current
+	desired.DeepCopyInto(newObject)
+
+	newObject.SetResourceVersion(oldObject.GetResourceVersion())
+	newObject.SetFinalizers(oldObject.GetFinalizers())
+
 	if forceOverwriteLabels {
-		current.SetLabels(desired.GetLabels())
+		newObject.SetLabels(desired.GetLabels())
 	} else {
-		current.SetLabels(mergeMapsBasedOnOldMap(desired.GetLabels(), currentCopy.GetLabels(), existingLabels))
+		newObject.SetLabels(mergeMapsBasedOnOldMap(desired.GetLabels(), oldObject.GetLabels(), existingLabels))
 	}
 	if forceOverwriteAnnotations {
-		current.SetAnnotations(desired.GetAnnotations())
+		newObject.SetAnnotations(desired.GetAnnotations())
 	} else {
-		current.SetAnnotations(mergeMapsBasedOnOldMap(desired.GetAnnotations(), currentCopy.GetAnnotations(), existingAnnotations))
+		newObject.SetAnnotations(mergeMapsBasedOnOldMap(desired.GetAnnotations(), oldObject.GetAnnotations(), existingAnnotations))
 	}
 
-	switch current.GroupVersionKind().GroupKind() {
+	// keep status of old object if it is set and not empty
+	var oldStatus map[string]interface{}
+	if oldStatusInterface, containsStatus := oldObject.Object["status"]; containsStatus {
+		// cast to map to be able to check if status is empty
+		if oldStatusMap, ok := oldStatusInterface.(map[string]interface{}); ok {
+			oldStatus = oldStatusMap
+		}
+	}
+
+	if len(oldStatus) > 0 {
+		newObject.Object["status"] = oldStatus
+	} else {
+		delete(newObject.Object, "status")
+	}
+
+	switch newObject.GroupVersionKind().GroupKind() {
 	case appsv1.SchemeGroupVersion.WithKind("Deployment").GroupKind():
-		return mergeDeployment(scheme.Scheme, currentCopy, current)
+		return mergeDeployment(scheme.Scheme, oldObject, newObject)
 	case batchv1.SchemeGroupVersion.WithKind("Job").GroupKind():
-		return mergeJob(scheme.Scheme, currentCopy, current)
+		return mergeJob(scheme.Scheme, oldObject, newObject)
 	case appsv1.SchemeGroupVersion.WithKind("StatefulSet").GroupKind():
-		return mergeStatefulSet(scheme.Scheme, currentCopy, current)
+		return mergeStatefulSet(scheme.Scheme, oldObject, newObject)
 	case corev1.SchemeGroupVersion.WithKind("Service").GroupKind():
-		return mergeService(scheme.Scheme, currentCopy, current)
+		return mergeService(scheme.Scheme, oldObject, newObject)
 	case corev1.SchemeGroupVersion.WithKind("ServiceAccount").GroupKind():
-		return mergeServiceAccount(scheme.Scheme, currentCopy, current)
+		return mergeServiceAccount(scheme.Scheme, oldObject, newObject)
 	}
 
 	return nil
@@ -142,7 +165,7 @@ func mergeService(scheme *runtime.Scheme, oldObj, newObj runtime.Object) error {
 
 	switch newService.Spec.Type {
 	case corev1.ServiceTypeLoadBalancer, corev1.ServiceTypeNodePort:
-		ports := []corev1.ServicePort{}
+		var ports []corev1.ServicePort
 
 		for _, np := range newService.Spec.Ports {
 			p := np
