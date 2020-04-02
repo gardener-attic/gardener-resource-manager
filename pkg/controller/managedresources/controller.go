@@ -28,6 +28,7 @@ import (
 	"github.com/gardener/gardener-resource-manager/pkg/controller/utils"
 
 	"github.com/go-logr/logr"
+	"github.com/hashicorp/go-multierror"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -211,18 +212,15 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 
 	if deletionPending, err := r.cleanOldResources(existingResourcesIndex); err != nil {
 		var reason string
-		var message string
 		if deletionPending {
 			reason = "DeletionPending"
-			message = "Deletion is still pending"
 			log.Error(err, "Deletion is still pending")
 		} else {
 			reason = "DeletionFailed"
-			message = "Deletion of old resources failed"
 			log.Error(err, "Deletion of old resources failed")
 		}
 
-		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, reason, message)
+		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, reason, err.Error())
 		newConditions := resourcesv1alpha1helper.MergeConditions(mr.Status.Conditions, conditionResourcesApplied)
 		if err := tryUpdateManagedResourceStatus(r.ctx, r.client, mr, newConditions, mr.Status.Resources); err != nil {
 			log.Error(err, "Could not update the ManagedResource status")
@@ -235,7 +233,7 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 	if err := r.applyNewResources(newResourcesObjects, mr.Spec.InjectLabels); err != nil {
 		log.Error(err, "Could not apply all new resources")
 
-		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, "ApplyFailed", "Could not apply all new resources")
+		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, "ApplyFailed", err.Error())
 		newConditions := resourcesv1alpha1helper.MergeConditions(mr.Status.Conditions, conditionResourcesApplied)
 		if err := tryUpdateManagedResourceStatus(r.ctx, r.client, mr, newConditions, mr.Status.Resources); err != nil {
 			log.Error(err, "Could not update the ManagedResource status")
@@ -263,14 +261,27 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 func (r *Reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logger) (ctrl.Result, error) {
 	log.Info("Starting to delete ManagedResource")
 
+	conditionResourcesApplied := resourcesv1alpha1helper.GetOrInitCondition(mr.Status.Conditions, resourcesv1alpha1.ResourcesApplied)
+
 	if keepObjects := mr.Spec.KeepObjects; keepObjects == nil || !*keepObjects {
 		existingResourcesIndex := NewObjectIndex(mr.Status.Resources, nil)
 		if deletionPending, err := r.cleanOldResources(existingResourcesIndex); err != nil {
+			var reason string
 			if deletionPending {
+				reason = "DeletionPending"
 				log.Error(err, "Deletion is still pending")
 			} else {
+				reason = "DeletionFailed"
 				log.Error(err, "Deletion of all resources failed")
 			}
+
+			conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, reason, err.Error())
+			newConditions := resourcesv1alpha1helper.MergeConditions(mr.Status.Conditions, conditionResourcesApplied)
+			if err := tryUpdateManagedResourceStatus(r.ctx, r.client, mr, newConditions, mr.Status.Resources); err != nil {
+				log.Error(err, "Could not update the ManagedResource status")
+				return ctrl.Result{}, err
+			}
+
 			return ctrl.Result{}, err
 		}
 	} else {
@@ -302,7 +313,9 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 	var (
 		results   = make(chan error)
 		wg        sync.WaitGroup
-		errorList = []error{}
+		errorList = &multierror.Error{
+			ErrorFormat: utils.NewErrorFormatFuncWithPrefix("Could not apply all new resources"),
+		}
 	)
 
 	for _, o := range newResourcesObjects {
@@ -360,15 +373,11 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 
 	for err := range results {
 		if err != nil {
-			errorList = append(errorList, err)
+			errorList = multierror.Append(errorList, err)
 		}
 	}
 
-	if len(errorList) > 0 {
-		return fmt.Errorf("Errors occurred during applying: %+v", errorList)
-	}
-
-	return nil
+	return errorList.ErrorOrNil()
 }
 
 func ignore(meta metav1.Object) bool {
@@ -386,9 +395,12 @@ func (r *Reconciler) cleanOldResources(index *ObjectIndex) (bool, error) {
 	}
 
 	var (
-		results   = make(chan *output)
-		wg        sync.WaitGroup
-		errorList = []error{}
+		results         = make(chan *output)
+		wg              sync.WaitGroup
+		deletionPending = false
+		errorList       = &multierror.Error{
+			ErrorFormat: utils.NewErrorFormatFuncWithPrefix("Could not clean all old resources"),
+		}
 	)
 
 	for _, oldResource := range index.Objects() {
@@ -426,18 +438,17 @@ func (r *Reconciler) cleanOldResources(index *ObjectIndex) (bool, error) {
 
 	for out := range results {
 		if out.deletionPending {
-			return true, fmt.Errorf("Deletion of old resource %s is still pending", out.resource)
+			deletionPending = true
+			errorList = multierror.Append(errorList, fmt.Errorf("deletion of old resource %q is still pending", out.resource))
+			continue
 		}
 
 		if out.err != nil {
-			errorList = append(errorList, out.err)
+			errorList = multierror.Append(errorList, fmt.Errorf("error during deletion of old resource %q: %w", out.resource, out.err))
 		}
 	}
 
-	if len(errorList) > 0 {
-		return true, fmt.Errorf("Errors occurred during deletion: %+v", errorList)
-	}
-	return false, nil
+	return deletionPending, errorList.ErrorOrNil()
 }
 
 func tryUpdateManagedResourceStatus(
