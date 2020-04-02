@@ -112,7 +112,8 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 		newResourcesObjectReferences []resourcesv1alpha1.ObjectReference
 		newResourcesSet              = sets.NewString()
 
-		existingResourcesIndex = NewObjectIndex(mr.Status.Resources, mr.Spec.Equivalences)
+		equivalences           = NewEquivalences(mr.Spec.Equivalences...)
+		existingResourcesIndex = NewObjectIndex(mr.Status.Resources, equivalences)
 
 		forceOverwriteLabels      bool
 		forceOverwriteAnnotations bool
@@ -481,17 +482,6 @@ func tryUpdateManagedResourceStatus(
 		mr.Status.ObservedGeneration = mr.Generation
 		return nil
 	})
-}
-
-func objectKey(group, kind, namespace, name string) string {
-	if kind != "Namespace" && namespace == "" {
-		namespace = metav1.NamespaceDefault
-	}
-	return fmt.Sprintf("%s/%s/%s/%s", group, kind, namespace, name)
-}
-
-func objectKeyByReference(o resourcesv1alpha1.ObjectReference) string {
-	return objectKey(o.GroupVersionKind().Group, o.Kind, o.Namespace, o.Name)
 }
 
 func unstructuredToString(o *unstructured.Unstructured) string {

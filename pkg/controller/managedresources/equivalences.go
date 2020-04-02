@@ -15,119 +15,83 @@
 package managedresources
 
 import (
-	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-type equivalences [][]metav1.GroupKind
-
-var defaultEquivalences = equivalences{
-	EquiSetForKind("Deployment", "extensions", "apps"),
-	EquiSetForKind("DaemonSet", "extensions", "apps"),
-	EquiSetForKind("ReplicaSet", "extensions", "apps"),
-	EquiSetForKind("StatefulSet", "extensions", "apps"),
-	EquiSetForKind("Ingress", "extensions", "networking.k8s.io"),
-	EquiSetForKind("NetworkPolicy", "extensions", "networking.k8s.io"),
-	EquiSetForKind("PodSecurityPolicy", "extensions", "policy"),
+var defaultEquivalences = []equivalenceList{
+	newEquivalenceList("Deployment", "extensions", "apps"),
+	newEquivalenceList("DaemonSet", "extensions", "apps"),
+	newEquivalenceList("ReplicaSet", "extensions", "apps"),
+	newEquivalenceList("StatefulSet", "extensions", "apps"),
+	newEquivalenceList("Ingress", "extensions", "networking.k8s.io"),
+	newEquivalenceList("NetworkPolicy", "extensions", "networking.k8s.io"),
+	newEquivalenceList("PodSecurityPolicy", "extensions", "policy"),
 }
 
-type GroupKindSet map[metav1.GroupKind]struct{}
+type equivalenceList []metav1.GroupKind
 
-func (s GroupKindSet) Insert(gks ...metav1.GroupKind) GroupKindSet {
+// EquivalenceSet is a set of GroupKinds which should be considered as equivalent representation of an Object Kind.
+type EquivalenceSet map[metav1.GroupKind]struct{}
+
+// Insert adds the given GroupKinds to the EquivalenceSet
+func (s EquivalenceSet) Insert(gks ...metav1.GroupKind) EquivalenceSet {
 	for _, gk := range gks {
 		s[gk] = struct{}{}
 	}
 	return s
-
-}
-func (s GroupKindSet) Delete(gks ...metav1.GroupKind) GroupKindSet {
-	for _, gk := range gks {
-		delete(s, gk)
-	}
-	return s
 }
 
-type ObjectIndex struct {
-	index        map[string]resourcesv1alpha1.ObjectReference
-	found        sets.String
-	equivalences map[metav1.GroupKind]GroupKindSet
-}
+// Equivalences is a set of EquivalenceSets, which can be used to look up equivalent GroupKinds for a given GroupKind.
+type Equivalences map[metav1.GroupKind]EquivalenceSet
 
-func NewObjectIndex(resources []resourcesv1alpha1.ObjectReference, equis equivalences) *ObjectIndex {
-	index := &ObjectIndex{
-		make(map[string]resourcesv1alpha1.ObjectReference, len(resources)),
-		sets.String{},
-		map[metav1.GroupKind]GroupKindSet{},
+// NewEquivalences constructs a new Equivalences object, which can be used to look up equivalent GroupKinds for a given
+// GroupKind. It already has some default equivalences predefined (e.g. for Kind `Deployment` in Group `apps` and
+// `extensions`). It can optionally take additional lists of GroupKinds which should be considered as equivalent
+// representations of the respective Object Kinds.
+func NewEquivalences(additionalEquivalences ...[]metav1.GroupKind) Equivalences {
+	e := Equivalences{}
+
+	for _, equivalences := range defaultEquivalences {
+		e.addEquivalentGroupKinds(equivalences)
 	}
 
-	for _, r := range resources {
-		index.index[objectKeyByReference(r)] = r
+	for _, equivalences := range additionalEquivalences {
+		e.addEquivalentGroupKinds(equivalences)
 	}
-	index.addEquivalences(defaultEquivalences)
-	index.addEquivalences(equis)
-	return index
+
+	return e
 }
 
-func (i *ObjectIndex) Objects() map[string]resourcesv1alpha1.ObjectReference {
-	return i.index
-}
+func (e Equivalences) addEquivalentGroupKinds(equivalentGroupKinds []metav1.GroupKind) {
+	var m EquivalenceSet
 
-func (i *ObjectIndex) addEquivalences(equis equivalences) {
-	for _, equi := range equis {
-		var m GroupKindSet
-		for _, e := range equi {
-			if f, ok := i.equivalences[e]; ok {
-				m = f
-				break
-			}
-		}
-		if m == nil {
-			m = map[metav1.GroupKind]struct{}{}
-		}
-		for _, e := range equi {
-			m.Insert(e)
-			i.equivalences[e] = m
+	// check if we already have an equivalence set for one of the given GroupKinds
+	// if so, add the equivalents to the existing set, otherwise construct a new one
+	for _, groupKind := range equivalentGroupKinds {
+		if f, ok := (e)[groupKind]; ok {
+			m = f
+			break
 		}
 	}
-}
 
-func (i ObjectIndex) GetEquivalencesFor(gk metav1.GroupKind) GroupKindSet {
-	return i.equivalences[gk]
-}
-
-func (i ObjectIndex) Found(ref resourcesv1alpha1.ObjectReference) bool {
-	return i.found.Has(objectKeyByReference(ref))
-}
-
-func (i ObjectIndex) Lookup(ref resourcesv1alpha1.ObjectReference) (resourcesv1alpha1.ObjectReference, bool) {
-	key := objectKeyByReference(ref)
-	if found, ok := i.index[key]; ok {
-		i.found.Insert(key)
-		return found, ok
+	if m == nil {
+		m = EquivalenceSet{}
 	}
-	gk := metav1.GroupKind{
-		Group: ref.GroupVersionKind().Group,
-		Kind:  ref.Kind,
+
+	// add the equivalence set for each group kind
+	for _, groupKind := range equivalentGroupKinds {
+		m.Insert(groupKind)
+		e[groupKind] = m
 	}
-	equis, ok := i.equivalences[gk]
-	if ok {
-		for e := range equis {
-			key = objectKey(e.Group, e.Kind, ref.Namespace, ref.Name)
-			if found, ok := i.index[key]; ok {
-				i.found.Insert(key)
-				return found, ok
-			}
-		}
-	}
-	return resourcesv1alpha1.ObjectReference{}, false
 }
 
-////////////////////////////////////////////////////////////////////////////////
+// GetEquivalencesFor looks up which GroupKinds should be considered as equivalent to a given GroupKind.
+func (e Equivalences) GetEquivalencesFor(gk metav1.GroupKind) EquivalenceSet {
+	return e[gk]
+}
 
-func EquiSetForKind(kind string, groups ...string) []metav1.GroupKind {
-	var r []metav1.GroupKind
+func newEquivalenceList(kind string, groups ...string) equivalenceList {
+	var r equivalenceList
 
 	for _, g := range groups {
 		r = append(r, metav1.GroupKind{
@@ -135,5 +99,6 @@ func EquiSetForKind(kind string, groups ...string) []metav1.GroupKind {
 			Kind:  kind,
 		})
 	}
+
 	return r
 }

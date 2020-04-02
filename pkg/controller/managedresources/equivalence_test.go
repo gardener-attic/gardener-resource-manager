@@ -15,114 +15,101 @@
 package managedresources
 
 import (
-	"github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
+	"fmt"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	v1 "k8s.io/api/core/v1"
-	schema "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var _ = Describe("Resource Equivalences", func() {
+var _ = Describe("Equivalences", func() {
 
-	Describe("Setup", func() {
-		It("single set ", func() {
-			equis := equivalences{
-				[]schema.GroupKind{
-					{Group: "groupA", Kind: "kindA"},
-					{Group: "groupB", Kind: "kindB"},
-					{Group: "groupC", Kind: "kindC"},
-				},
-			}
+	Describe("#NewEquivalences, #GetEquivalencesFor", func() {
+		var (
+			additionalEquivalences  [][]metav1.GroupKind
+			expectedEquivalenceSets map[metav1.GroupKind]EquivalenceSet
+		)
 
-			set := GroupKindSet{}.Insert(equis[0]...)
-			index := NewObjectIndex(nil, equis)
-
-			Expect(index.GetEquivalencesFor(equis[0][0])).To(Equal(set))
-			Expect(index.GetEquivalencesFor(equis[0][1])).To(Equal(set))
-			Expect(index.GetEquivalencesFor(equis[0][2])).To(Equal(set))
+		BeforeEach(func() {
+			additionalEquivalences = [][]metav1.GroupKind{}
+			expectedEquivalenceSets = map[metav1.GroupKind]EquivalenceSet{}
 		})
-		It("multiple sets", func() {
-			equis := equivalences{
-				[]schema.GroupKind{
-					{Group: "groupA", Kind: "kindA"},
-					{Group: "groupB", Kind: "kindB"},
-					{Group: "groupC", Kind: "kindC"},
-				},
-				[]schema.GroupKind{
+
+		AfterEach(func() {
+			e := NewEquivalences(additionalEquivalences...)
+
+			for gk, expectedEquivalenceSet := range expectedEquivalenceSets {
+				By(fmt.Sprintf("%#v should be equivalent to %+v", gk, expectedEquivalenceSet))
+				Expect(e.GetEquivalencesFor(gk)).To(Equal(expectedEquivalenceSet))
+			}
+		})
+
+		It("no additonal equivalence sets (default equivalence sets)", func() {
+			for _, equiList := range defaultEquivalences {
+				for _, gk := range equiList {
+					expectedEquivalenceSets[gk] = EquivalenceSet{}.Insert(equiList...)
+				}
+			}
+		})
+
+		It("single additional equivalence set", func() {
+			equis := []metav1.GroupKind{
+				{Group: "groupA", Kind: "kindA"},
+				{Group: "groupB", Kind: "kindB"},
+				{Group: "groupC", Kind: "kindC"},
+			}
+			additionalEquivalences = append(additionalEquivalences, equis)
+
+			expectedSet := EquivalenceSet{}.Insert(equis...)
+			for _, gk := range equis {
+				expectedEquivalenceSets[gk] = expectedSet
+			}
+		})
+
+		It("multiple additional (disjoint) equivalence sets", func() {
+			equis := [][]metav1.GroupKind{
+				{
 					{Group: "groupA1", Kind: "kindA1"},
 					{Group: "groupB1", Kind: "kindB1"},
 					{Group: "groupC1", Kind: "kindC1"},
 				},
+				{
+					{Group: "groupA2", Kind: "kindA2"},
+					{Group: "groupB2", Kind: "kindB2"},
+					{Group: "groupC2", Kind: "kindC2"},
+				},
 			}
+			additionalEquivalences = append(additionalEquivalences, equis...)
 
-			set0 := GroupKindSet{}.Insert(equis[0]...)
-			set1 := GroupKindSet{}.Insert(equis[1]...)
-			index := NewObjectIndex(nil, equis)
-
-			Expect(index.GetEquivalencesFor(equis[0][0])).To(Equal(set0))
-			Expect(index.GetEquivalencesFor(equis[0][1])).To(Equal(set0))
-			Expect(index.GetEquivalencesFor(equis[0][2])).To(Equal(set0))
-
-			Expect(index.GetEquivalencesFor(equis[1][0])).To(Equal(set1))
-			Expect(index.GetEquivalencesFor(equis[1][1])).To(Equal(set1))
-			Expect(index.GetEquivalencesFor(equis[1][2])).To(Equal(set1))
+			for _, equiSet := range equis {
+				expectedSet := EquivalenceSet{}.Insert(equiSet...)
+				for _, gk := range equiSet {
+					expectedEquivalenceSets[gk] = expectedSet
+				}
+			}
 		})
 
-		It("mixed sets", func() {
-			equis := equivalences{
-				[]schema.GroupKind{
+		It("multiple additional (mixed) equivalence sets", func() {
+			equis := [][]metav1.GroupKind{
+				{
 					{Group: "groupA", Kind: "kindA"},
 					{Group: "groupB", Kind: "kindB"},
 				},
-				[]schema.GroupKind{
+				{
 					{Group: "groupB", Kind: "kindB"},
 					{Group: "groupC", Kind: "kindC"},
 				},
 			}
+			additionalEquivalences = append(additionalEquivalences, equis...)
 
-			set := GroupKindSet{}.Insert(equis[0]...).Insert(equis[1]...)
-			index := NewObjectIndex(nil, equis)
+			expectedSet := EquivalenceSet{}.Insert(equis[0]...).Insert(equis[1]...)
 
-			Expect(index.GetEquivalencesFor(equis[0][0])).To(Equal(set))
-			Expect(index.GetEquivalencesFor(equis[0][1])).To(Equal(set))
-
-			Expect(index.GetEquivalencesFor(equis[1][0])).To(Equal(set))
-			Expect(index.GetEquivalencesFor(equis[1][1])).To(Equal(set))
+			for _, equiSet := range equis {
+				for _, gk := range equiSet {
+					expectedEquivalenceSets[gk] = expectedSet
+				}
+			}
 		})
 	})
-	Describe("Lookup", func() {
-		It("single", func() {
-			equis := equivalences{
-				[]schema.GroupKind{
-					{Group: "groupA", Kind: "kindA"},
-					{Group: "groupB", Kind: "kindB"},
-					{Group: "groupC", Kind: "kindC"},
-				},
-			}
 
-			refold := v1alpha1.ObjectReference{
-				ObjectReference: v1.ObjectReference{Name: "name", Namespace: "ns", Kind: "kindA", APIVersion: "groupA/v2"},
-			}
-
-			refunused := v1alpha1.ObjectReference{
-				ObjectReference: v1.ObjectReference{Name: "foo", Namespace: "bar", Kind: "kind", APIVersion: "group/v1"},
-			}
-			old := []v1alpha1.ObjectReference{
-				refold,
-				refunused,
-			}
-
-			index := NewObjectIndex(old, equis)
-
-			refnew := v1alpha1.ObjectReference{
-				ObjectReference: v1.ObjectReference{Name: "name", Namespace: "ns", Kind: "kindB", APIVersion: "groupB/v1"},
-			}
-
-			found, _ := index.Lookup(refnew)
-			Expect(found).To(Equal(refold))
-			Expect(index.Found(refold)).To(BeTrue())
-			Expect(index.Found(refunused)).To(BeFalse())
-		})
-	})
 })
