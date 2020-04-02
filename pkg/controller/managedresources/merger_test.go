@@ -15,12 +15,15 @@
 package managedresources
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/pointer"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -60,7 +63,7 @@ var _ = Describe("merger", func() {
 
 			expected := current.DeepCopy()
 
-			Expect(merge(desired, current, false, nil, false, nil)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(merge(desired, current, false, nil, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.GetResourceVersion()).To(Equal(expected.GetResourceVersion()))
 		})
 
@@ -69,7 +72,7 @@ var _ = Describe("merger", func() {
 
 			expected := current.DeepCopy()
 
-			Expect(merge(desired, current, false, nil, false, nil)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(merge(desired, current, false, nil, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.GetFinalizers()).To(Equal(expected.GetFinalizers()))
 		})
 
@@ -83,7 +86,7 @@ var _ = Describe("merger", func() {
 
 			expected := current.DeepCopy()
 
-			Expect(merge(desired, current, false, nil, false, nil)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(merge(desired, current, false, nil, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.Object["status"]).To(Equal(expected.Object["status"]))
 		})
 
@@ -94,7 +97,7 @@ var _ = Describe("merger", func() {
 
 			current.Object["status"] = map[string]interface{}{}
 
-			Expect(merge(desired, current, false, nil, false, nil)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(merge(desired, current, false, nil, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.Object["status"]).To(BeNil())
 		})
 
@@ -105,8 +108,215 @@ var _ = Describe("merger", func() {
 
 			delete(current.Object, "status")
 
-			Expect(merge(desired, current, false, nil, false, nil)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(merge(desired, current, false, nil, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.Object["status"]).To(BeNil())
+		})
+	})
+
+	Describe("#mergeDeployment", func() {
+		var (
+			old, new *appsv1.Deployment
+			s        *runtime.Scheme
+		)
+
+		BeforeEach(func() {
+			s = runtime.NewScheme()
+			Expect(appsv1.AddToScheme(s)).ToNot(HaveOccurred(), "schema add should succeed")
+
+			old = &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{},
+				Spec: appsv1.DeploymentSpec{
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"controller-uid": "1a2b3c"},
+					},
+					Replicas: pointer.Int32Ptr(1),
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name: "foo-container",
+								},
+							},
+						},
+					},
+				},
+			}
+
+			new = old.DeepCopy()
+		})
+
+		It("should not overwrite old .spec.replicas if the new one is nil", func() {
+			new.Spec.Replicas = nil
+
+			expected := old.DeepCopy()
+
+			Expect(mergeDeployment(s, old, new, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(new).To(Equal(expected))
+		})
+
+		It("should not overwrite old .spec.replicas if preserveReplicas is true", func() {
+			new.Spec.Replicas = pointer.Int32Ptr(2)
+
+			expected := old.DeepCopy()
+
+			Expect(mergeDeployment(s, old, new, true, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(new).To(Equal(expected))
+		})
+
+		It("should use new .spec.replicas if preserveReplicas is false", func() {
+			new.Spec.Replicas = pointer.Int32Ptr(2)
+
+			expected := new.DeepCopy()
+
+			Expect(mergeDeployment(s, old, new, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(new).To(Equal(expected))
+		})
+	})
+
+	Describe("#mergeStatefulset", func() {
+		var (
+			old, new *appsv1.StatefulSet
+			s        *runtime.Scheme
+		)
+
+		BeforeEach(func() {
+			s = runtime.NewScheme()
+			Expect(appsv1.AddToScheme(s)).ToNot(HaveOccurred(), "schema add should succeed")
+
+			old = &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{},
+				Spec: appsv1.StatefulSetSpec{
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"controller-uid": "1a2b3c"},
+					},
+					Replicas: pointer.Int32Ptr(1),
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name: "foo-container",
+								},
+							},
+						},
+					},
+				},
+			}
+
+			new = old.DeepCopy()
+		})
+
+		It("should not overwrite old .spec.replicas if the new one is nil", func() {
+			new.Spec.Replicas = nil
+
+			expected := old.DeepCopy()
+
+			Expect(mergeStatefulSet(s, old, new, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(new).To(Equal(expected))
+		})
+
+		It("should not overwrite old .spec.replicas if preserveReplicas is true", func() {
+			new.Spec.Replicas = pointer.Int32Ptr(2)
+
+			expected := old.DeepCopy()
+
+			Expect(mergeStatefulSet(s, old, new, true, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(new).To(Equal(expected))
+		})
+
+		It("should use new .spec.replicas if preserveReplicas is false", func() {
+			new.Spec.Replicas = pointer.Int32Ptr(2)
+
+			expected := new.DeepCopy()
+
+			Expect(mergeStatefulSet(s, old, new, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(new).To(Equal(expected))
+		})
+	})
+
+	Describe("#mergeContainer", func() {
+		var (
+			old, new *corev1.Container
+
+			quantity1, quantity2 resource.Quantity
+
+			resourceListBothSet, resourceListBothSet2 corev1.ResourceList
+		)
+
+		BeforeEach(func() {
+			old = &corev1.Container{
+				Name: "foo-container",
+				Resources: corev1.ResourceRequirements{
+					Limits:   nil,
+					Requests: nil,
+				},
+			}
+
+			new = old.DeepCopy()
+
+			q, err := resource.ParseQuantity("200")
+			Expect(err).NotTo(HaveOccurred())
+			quantity1 = q
+
+			resourceListBothSet = corev1.ResourceList{
+				corev1.ResourceCPU:    quantity1,
+				corev1.ResourceMemory: quantity1,
+			}
+
+			q, err = resource.ParseQuantity("500")
+			Expect(err).NotTo(HaveOccurred())
+			quantity2 = q
+
+			resourceListBothSet2 = corev1.ResourceList{
+				corev1.ResourceCPU:    quantity2,
+				corev1.ResourceMemory: quantity2,
+			}
+		})
+
+		It("should do nothing if resource requirements are not set", func() {
+			expected := old.DeepCopy()
+
+			mergeContainer(old, new, true)
+			Expect(new).To(Equal(expected))
+		})
+
+		It("should use new requests if preserveResources is false)", func() {
+			old.Resources.Requests = resourceListBothSet
+			new.Resources.Requests = resourceListBothSet2
+
+			expected := new.DeepCopy()
+
+			mergeContainer(old, new, false)
+			Expect(new).To(Equal(expected))
+		})
+
+		It("should use new limits if preserveResources is false)", func() {
+			old.Resources.Limits = resourceListBothSet
+			new.Resources.Limits = resourceListBothSet2
+
+			expected := new.DeepCopy()
+
+			mergeContainer(old, new, false)
+			Expect(new).To(Equal(expected))
+		})
+
+		It("should not overwrite requests if preserveResources is true)", func() {
+			new.Resources.Requests = resourceListBothSet
+			old.Resources.Requests = resourceListBothSet2
+
+			expected := old.DeepCopy()
+
+			mergeContainer(old, new, true)
+			Expect(new).To(Equal(expected))
+		})
+
+		It("should not overwrite limits if preserveResources is true)", func() {
+			new.Resources.Requests = resourceListBothSet
+			old.Resources.Requests = resourceListBothSet2
+
+			expected := old.DeepCopy()
+
+			mergeContainer(old, new, true)
+			Expect(new).To(Equal(expected))
 		})
 	})
 

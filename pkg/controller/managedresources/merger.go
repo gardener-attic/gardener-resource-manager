@@ -18,6 +18,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,7 +28,7 @@ import (
 // merge merges the values of the `desired` object into the `current` object while preserving `current`'s important
 // metadata (like resourceVersion and finalizers), status and selected spec fields of the respective kind (e.g.
 // .spec.selector of a Job).
-func merge(desired, current *unstructured.Unstructured, forceOverwriteLabels bool, existingLabels map[string]string, forceOverwriteAnnotations bool, existingAnnotations map[string]string) error {
+func merge(desired, current *unstructured.Unstructured, forceOverwriteLabels bool, existingLabels map[string]string, forceOverwriteAnnotations bool, existingAnnotations map[string]string, preserveReplicas, preserveResources bool) error {
 	// save copy of current object before merging
 	oldObject := current.DeepCopy()
 
@@ -65,12 +66,12 @@ func merge(desired, current *unstructured.Unstructured, forceOverwriteLabels boo
 	}
 
 	switch newObject.GroupVersionKind().GroupKind() {
-	case appsv1.SchemeGroupVersion.WithKind("Deployment").GroupKind():
-		return mergeDeployment(scheme.Scheme, oldObject, newObject)
+	case appsv1.SchemeGroupVersion.WithKind("Deployment").GroupKind(), extensionsv1beta1.SchemeGroupVersion.WithKind("Deployment").GroupKind():
+		return mergeDeployment(scheme.Scheme, oldObject, newObject, preserveReplicas, preserveResources)
 	case batchv1.SchemeGroupVersion.WithKind("Job").GroupKind():
 		return mergeJob(scheme.Scheme, oldObject, newObject)
-	case appsv1.SchemeGroupVersion.WithKind("StatefulSet").GroupKind():
-		return mergeStatefulSet(scheme.Scheme, oldObject, newObject)
+	case appsv1.SchemeGroupVersion.WithKind("StatefulSet").GroupKind(), extensionsv1beta1.SchemeGroupVersion.WithKind("StatefulSet").GroupKind():
+		return mergeStatefulSet(scheme.Scheme, oldObject, newObject, preserveReplicas, preserveResources)
 	case corev1.SchemeGroupVersion.WithKind("Service").GroupKind():
 		return mergeService(scheme.Scheme, oldObject, newObject)
 	case corev1.SchemeGroupVersion.WithKind("ServiceAccount").GroupKind():
@@ -80,7 +81,7 @@ func merge(desired, current *unstructured.Unstructured, forceOverwriteLabels boo
 	return nil
 }
 
-func mergeDeployment(scheme *runtime.Scheme, oldObj, newObj runtime.Object) error {
+func mergeDeployment(scheme *runtime.Scheme, oldObj, newObj runtime.Object, preserveReplicas, preserveResources bool) error {
 	oldDeployment := &appsv1.Deployment{}
 	if err := scheme.Convert(oldObj, oldDeployment, nil); err != nil {
 		return err
@@ -92,12 +93,61 @@ func mergeDeployment(scheme *runtime.Scheme, oldObj, newObj runtime.Object) erro
 	}
 
 	// Do not overwrite a Deployment's '.spec.replicas' if the new Deployment's '.spec.replicas'
-	// field is unset.
-	if newDeployment.Spec.Replicas == nil {
+	// field is unset or the Deployment is scaled by either an HPA or HVPA.
+	if newDeployment.Spec.Replicas == nil || preserveReplicas {
 		newDeployment.Spec.Replicas = oldDeployment.Spec.Replicas
 	}
 
+	mergePodTemplate(&oldDeployment.Spec.Template, &newDeployment.Spec.Template, preserveResources)
+
 	return scheme.Convert(newDeployment, newObj, nil)
+}
+
+func mergePodTemplate(oldPod, newPod *corev1.PodTemplateSpec, preserveResources bool) {
+	if !preserveResources {
+		return
+	}
+
+	// Do not overwrite a PodTemplate's resource requests / limits if it is scaled by an HVPA
+	for _, newContainer := range newPod.Spec.Containers {
+		newContainerName := newContainer.Name
+
+		for _, oldContainer := range oldPod.Spec.Containers {
+			oldContainerName := oldContainer.Name
+
+			if newContainerName == oldContainerName {
+				mergeContainer(&oldContainer, &newContainer, preserveResources)
+			}
+		}
+	}
+}
+
+func mergeContainer(oldContainer, newContainer *corev1.Container, preserveResources bool) {
+	if !preserveResources {
+		return
+	}
+
+	for resourceName, oldRequests := range oldContainer.Resources.Requests {
+		switch resourceName {
+		case corev1.ResourceCPU, corev1.ResourceMemory:
+			if newContainer.Resources.Requests == nil {
+				newContainer.Resources.Requests = corev1.ResourceList{}
+			}
+
+			newContainer.Resources.Requests[resourceName] = oldRequests
+		}
+	}
+
+	for resourceName, oldLimits := range oldContainer.Resources.Limits {
+		switch resourceName {
+		case corev1.ResourceCPU, corev1.ResourceMemory:
+			if newContainer.Resources.Limits == nil {
+				newContainer.Resources.Limits = corev1.ResourceList{}
+			}
+
+			newContainer.Resources.Limits[resourceName] = oldLimits
+		}
+	}
 }
 
 func mergeJob(scheme *runtime.Scheme, oldObj, newObj runtime.Object) error {
@@ -123,7 +173,7 @@ func mergeJob(scheme *runtime.Scheme, oldObj, newObj runtime.Object) error {
 	return scheme.Convert(newJob, newObj, nil)
 }
 
-func mergeStatefulSet(scheme *runtime.Scheme, oldObj, newObj runtime.Object) error {
+func mergeStatefulSet(scheme *runtime.Scheme, oldObj, newObj runtime.Object, preserveReplicas, preserveResources bool) error {
 	oldStatefulSet := &appsv1.StatefulSet{}
 	if err := scheme.Convert(oldObj, oldStatefulSet, nil); err != nil {
 		return err
@@ -135,10 +185,12 @@ func mergeStatefulSet(scheme *runtime.Scheme, oldObj, newObj runtime.Object) err
 	}
 
 	// Do not overwrite a StatefulSet's '.spec.replicas' if the new StatefulSet's `.spec.replicas'
-	// field is unset.
-	if newStatefulSet.Spec.Replicas == nil {
+	// field is unset or the Deployment is scaled by either an HPA or HVPA.
+	if newStatefulSet.Spec.Replicas == nil || preserveReplicas {
 		newStatefulSet.Spec.Replicas = oldStatefulSet.Spec.Replicas
 	}
+
+	mergePodTemplate(&oldStatefulSet.Spec.Template, &oldStatefulSet.Spec.Template, preserveResources)
 
 	return scheme.Convert(newStatefulSet, newObj, nil)
 }

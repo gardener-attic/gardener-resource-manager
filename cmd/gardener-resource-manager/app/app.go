@@ -23,6 +23,8 @@ import (
 	"sync"
 	"time"
 
+	hvpav1alpha1 "github.com/gardener/hvpa-controller/api/v1alpha1"
+
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
 	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources"
 	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources/health"
@@ -119,6 +121,7 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 			utilruntime.Must(scheme.AddToScheme(targetScheme)) // add most of the standard k8s APIs
 			utilruntime.Must(apiextensionsv1beta1.AddToScheme(targetScheme))
 			utilruntime.Must(apiextensionsv1.AddToScheme(targetScheme))
+			utilruntime.Must(hvpav1alpha1.AddToScheme(targetScheme))
 
 			targetConfig, err := getTargetConfig(targetKubeconfigPath)
 			if err != nil {
