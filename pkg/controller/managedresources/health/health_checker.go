@@ -15,7 +15,7 @@
 package health
 
 import (
-	health "github.com/gardener/gardener-resource-manager/pkg/health"
+	"github.com/gardener/gardener-resource-manager/pkg/health"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -26,53 +26,53 @@ import (
 
 // CheckHealth checks whether the given `runtime.Unstructured` is healthy.
 // `nil` is returned when the `runtime.Unstructured` has kind which is not supported by this function.
-func CheckHealth(obj runtime.Unstructured) error {
+func CheckHealth(scheme *runtime.Scheme, obj runtime.Object) error {
 	switch obj.GetObjectKind().GroupVersionKind().GroupKind() {
 	case apiextensionsv1beta1.SchemeGroupVersion.WithKind("CustomResourceDefinition").GroupKind():
 		crd := &apiextensionsv1beta1.CustomResourceDefinition{}
-		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), crd); err != nil {
+		if err := scheme.Convert(obj, crd, nil); err != nil {
 			return err
 		}
 		return health.CheckCustomResourceDefinition(crd)
 	case appsv1.SchemeGroupVersion.WithKind("DaemonSet").GroupKind():
 		ds := &appsv1.DaemonSet{}
-		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), ds); err != nil {
+		if err := scheme.Convert(obj, ds, nil); err != nil {
 			return err
 		}
 		return health.CheckDaemonSet(ds)
 	case appsv1.SchemeGroupVersion.WithKind("Deployment").GroupKind():
 		deploy := &appsv1.Deployment{}
-		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), deploy); err != nil {
+		if err := scheme.Convert(obj, deploy, nil); err != nil {
 			return err
 		}
 		return health.CheckDeployment(deploy)
 	case batchv1.SchemeGroupVersion.WithKind("Job").GroupKind():
 		job := &batchv1.Job{}
-		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), job); err != nil {
+		if err := scheme.Convert(obj, job, nil); err != nil {
 			return err
 		}
 		return health.CheckJob(job)
 	case corev1.SchemeGroupVersion.WithKind("Pod").GroupKind():
 		pod := &corev1.Pod{}
-		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), pod); err != nil {
+		if err := scheme.Convert(obj, pod, nil); err != nil {
 			return err
 		}
 		return health.CheckPod(pod)
 	case appsv1.SchemeGroupVersion.WithKind("ReplicaSet").GroupKind():
 		rs := &appsv1.ReplicaSet{}
-		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), rs); err != nil {
+		if err := scheme.Convert(obj, rs, nil); err != nil {
 			return err
 		}
 		return health.CheckReplicaSet(rs)
 	case corev1.SchemeGroupVersion.WithKind("ReplicationController").GroupKind():
 		rc := &corev1.ReplicationController{}
-		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), rc); err != nil {
+		if err := scheme.Convert(obj, rc, nil); err != nil {
 			return err
 		}
 		return health.CheckReplicationController(rc)
 	case appsv1.SchemeGroupVersion.WithKind("StatefulSet").GroupKind():
 		statefulSet := &appsv1.StatefulSet{}
-		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.UnstructuredContent(), statefulSet); err != nil {
+		if err := scheme.Convert(obj, statefulSet, nil); err != nil {
 			return err
 		}
 		return health.CheckStatefulSet(statefulSet)

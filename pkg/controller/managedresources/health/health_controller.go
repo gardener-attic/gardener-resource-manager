@@ -27,7 +27,7 @@ import (
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,12 +39,13 @@ type HealthReconciler struct {
 	log          logr.Logger
 	client       client.Client
 	targetClient client.Client
+	targetScheme *runtime.Scheme
 	classFilter  *managedresources.ClassFilter
 	syncPeriod   time.Duration
 }
 
-func NewHealthReconciler(ctx context.Context, log logr.Logger, client, targetClient client.Client, classFilter *managedresources.ClassFilter, syncPeriod time.Duration) *HealthReconciler {
-	return &HealthReconciler{ctx, log, client, targetClient, classFilter, syncPeriod}
+func NewHealthReconciler(ctx context.Context, log logr.Logger, client, targetClient client.Client, targetScheme *runtime.Scheme, classFilter *managedresources.ClassFilter, syncPeriod time.Duration) *HealthReconciler {
+	return &HealthReconciler{ctx, log, client, targetClient, targetScheme, classFilter, syncPeriod}
 }
 
 func (r *HealthReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
@@ -72,18 +73,28 @@ func (r *HealthReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	resourcesObjectReferences := mr.Status.Resources
 	for _, ref := range resourcesObjectReferences {
-		obj := &unstructured.Unstructured{}
-		obj.SetAPIVersion(ref.APIVersion)
-		obj.SetKind(ref.Kind)
+		var obj runtime.Object
+		// sigs.k8s.io/controller-runtime/pkg/client.DelegatingReader does not use the cache for unstructured.Unstructured
+		// objects, so we create a new object of the object's type to use the caching client
+		obj, err := r.targetScheme.New(ref.GroupVersionKind())
+		if err != nil {
+			log.Info("could not create new object of kind for health checks (probably not registered in the used scheme), falling back to unstructured request",
+				"GroupVersionKind", ref.GroupVersionKind().String(), "error", err.Error())
 
-		key := types.NamespacedName{Namespace: ref.Namespace, Name: ref.Name}
-		if err := r.targetClient.Get(r.ctx, key, obj); err != nil {
+			// fallback to unstructured requests if the object's type is not registered in the scheme
+			unstructuredObj := &unstructured.Unstructured{}
+			unstructuredObj.SetAPIVersion(ref.APIVersion)
+			unstructuredObj.SetKind(ref.Kind)
+			obj = unstructuredObj
+		}
+
+		if err := r.targetClient.Get(r.ctx, client.ObjectKey{Namespace: ref.Namespace, Name: ref.Name}, obj); err != nil {
 			if apierrors.IsNotFound(err) {
-				log.Info("Could not get object", "name", ref.Name)
+				log.Info("Could not get object", "namespace", ref.Namespace, "name", ref.Name)
 
 				var (
-					reason  = obj.GetKind() + "Missing"
-					message = fmt.Sprintf("Missing required %s with name %q.", ref.Kind, ref.Name)
+					reason  = ref.Kind + "Missing"
+					message = fmt.Sprintf("Required %s %q in namespace %q is missing.", ref.Kind, ref.Name, ref.Namespace)
 				)
 
 				conditionResourcesHealthy = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesHealthy, resourcesv1alpha1.ConditionFalse, reason, message)
@@ -98,10 +109,10 @@ func (r *HealthReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
-		if err := CheckHealth(obj); err != nil {
+		if err := CheckHealth(r.targetScheme, obj); err != nil {
 			var (
-				reason  = obj.GetKind() + "Unhealthy"
-				message = fmt.Sprintf("%s %s is unhealthy: %v", obj.GetKind(), obj.GetName(), err.Error())
+				reason  = ref.Kind + "Unhealthy"
+				message = fmt.Sprintf("Required %s %q in namespace %q is unhealthy: %v", ref.Kind, ref.Name, ref.Namespace, err.Error())
 			)
 
 			conditionResourcesHealthy = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesHealthy, resourcesv1alpha1.ConditionFalse, reason, message)

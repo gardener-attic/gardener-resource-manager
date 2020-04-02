@@ -127,7 +127,7 @@ func (i ObjectIndex) Lookup(ref resourcesv1alpha1.ObjectReference) (resourcesv1a
 ////////////////////////////////////////////////////////////////////////////////
 
 func EquiSetForKind(kind string, groups ...string) []metav1.GroupKind {
-	r := []metav1.GroupKind{}
+	var r []metav1.GroupKind
 
 	for _, g := range groups {
 		r = append(r, metav1.GroupKind{

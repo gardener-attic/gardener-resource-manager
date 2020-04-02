@@ -34,7 +34,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/restmapper"
@@ -133,7 +132,7 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 
 	for _, ref := range mr.Spec.SecretRefs {
 		secret := &corev1.Secret{}
-		if err := r.client.Get(r.ctx, types.NamespacedName{Namespace: mr.Namespace, Name: ref.Name}, secret); err != nil {
+		if err := r.client.Get(r.ctx, client.ObjectKey{Namespace: mr.Namespace, Name: ref.Name}, secret); err != nil {
 			log.Error(err, "Could not read secret", "name", secret.Name)
 
 			conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, "CannotReadSecret", err.Error())
@@ -179,8 +178,27 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 				}
 
 				obj := &unstructured.Unstructured{Object: decodedObj}
-				if obj.GetKind() != "Namespace" && obj.GetNamespace() == "" {
-					obj.SetNamespace(metav1.NamespaceDefault)
+
+				// look up scope of objects' kind to check, if we should default the namespace field
+				mapping, err := r.targetRESTMapper.RESTMapping(obj.GroupVersionKind().GroupKind(), obj.GroupVersionKind().Version)
+				if err != nil || mapping == nil {
+					if meta.IsNoMatchError(err) {
+						// Reset RESTMapper in case of cache misses.
+						r.targetRESTMapper.Reset()
+					}
+					log.Error(err, fmt.Sprintf("could not get rest mapping for %s '%s/%s'", obj.GetKind(), obj.GetNamespace(), obj.GetName()),
+						"secret", fmt.Sprintf("%s/%s", secret.Namespace, secret.Name), "secretKey", key, "objectIndexInFile", i)
+					return reconcile.Result{}, err
+				}
+
+				if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
+					// default namespace field to `default` in case of namespaced kinds
+					if obj.GetNamespace() == "" {
+						obj.SetNamespace(metav1.NamespaceDefault)
+					}
+				} else {
+					// unset namespace field in case of non-namespaced kinds
+					obj.SetNamespace("")
 				}
 
 				var (
