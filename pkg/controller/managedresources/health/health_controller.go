@@ -55,7 +55,7 @@ func (r *HealthReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	mr := &resourcesv1alpha1.ManagedResource{}
 	if err := r.client.Get(r.ctx, req.NamespacedName, mr); err != nil {
 		if apierrors.IsNotFound(err) {
-			log.Info("Could not find Managedresource")
+			log.Info("Stopping health checks for ManagedResource, as it has been deleted")
 			return reconcile.Result{}, nil
 		}
 		log.Error(err, "Could not fetch Managedresource")
@@ -66,6 +66,11 @@ func (r *HealthReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	if _, responsible := r.classFilter.Active(mr); !responsible {
 		log.Info("Stopping health checks as the responsibility changed")
 		return ctrl.Result{}, nil // Do not requeue
+	}
+
+	if !mr.DeletionTimestamp.IsZero() {
+		log.Info("Stopping health checks for ManagedResource, as it has been deleted (deletionTimestamp is set)")
+		return reconcile.Result{}, nil
 	}
 
 	// Initialize condition based on the current status.
