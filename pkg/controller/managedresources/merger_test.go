@@ -111,6 +111,31 @@ var _ = Describe("merger", func() {
 			Expect(merge(desired, current, false, nil, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.Object["status"]).To(BeNil())
 		})
+
+		Describe("sets warning annotation", func() {
+			AfterEach(func() {
+				Expect(current.GetAnnotations()).
+					To(HaveKeyWithValue("resources.gardener.cloud/description", descriptionAnnotationText))
+			})
+
+			It("when forceOverrideAnnotation is false", func() {
+				Expect(merge(desired, current, false, nil, false, nil, false, false)).ToNot(HaveOccurred(), "merge succeeds")
+			})
+			It("when forceOverrideAnnotation is false and old annotations exist", func() {
+				desired.SetAnnotations(map[string]string{"goo": "boo"})
+				current.SetAnnotations(map[string]string{"foo": "bar"})
+				Expect(merge(desired, current, false, nil, false, nil, false, false)).ToNot(HaveOccurred(), "merge succeeds")
+
+				Expect(current.GetAnnotations()).To(HaveKeyWithValue("goo", "boo"))
+				Expect(current.GetAnnotations()).To(HaveKeyWithValue("foo", "bar"))
+			})
+
+			It("when forceOverrideAnnotation is true", func() {
+				desired.SetAnnotations(map[string]string{"goo": "boo"})
+				Expect(merge(desired, current, false, nil, true, nil, false, false)).ToNot(HaveOccurred(), "merge succeeds")
+				Expect(current.GetAnnotations()).To(HaveKeyWithValue("goo", "boo"))
+			})
+		})
 	})
 
 	Describe("#mergeDeployment", func() {

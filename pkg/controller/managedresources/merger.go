@@ -25,6 +25,12 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
+const (
+	descriptionAnnotation     = "resources.gardener.cloud/description"
+	descriptionAnnotationText = `DO NOT EDIT - This resource is managed by gardener-resource-manager.
+Any modifications are discarded and the resource is returned to the original state.`
+)
+
 // merge merges the values of the `desired` object into the `current` object while preserving `current`'s important
 // metadata (like resourceVersion and finalizers), status and selected spec fields of the respective kind (e.g.
 // .spec.selector of a Job).
@@ -44,11 +50,21 @@ func merge(desired, current *unstructured.Unstructured, forceOverwriteLabels boo
 	} else {
 		newObject.SetLabels(mergeMapsBasedOnOldMap(desired.GetLabels(), oldObject.GetLabels(), existingLabels))
 	}
+
+	var ann map[string]string
+
 	if forceOverwriteAnnotations {
-		newObject.SetAnnotations(desired.GetAnnotations())
+		ann = desired.GetAnnotations()
 	} else {
-		newObject.SetAnnotations(mergeMapsBasedOnOldMap(desired.GetAnnotations(), oldObject.GetAnnotations(), existingAnnotations))
+		ann = mergeMapsBasedOnOldMap(desired.GetAnnotations(), oldObject.GetAnnotations(), existingAnnotations)
 	}
+
+	if ann == nil {
+		ann = map[string]string{}
+	}
+
+	ann[descriptionAnnotation] = descriptionAnnotationText
+	newObject.SetAnnotations(ann)
 
 	// keep status of old object if it is set and not empty
 	var oldStatus map[string]interface{}
