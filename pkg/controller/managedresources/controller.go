@@ -75,10 +75,10 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	mr := &resourcesv1alpha1.ManagedResource{}
 	if err := r.client.Get(r.ctx, req.NamespacedName, mr); err != nil {
 		if apierrors.IsNotFound(err) {
-			log.Error(nil, "Could not find Managedresource")
+			log.Info("Stopping reconciliation of ManagedResource, as it has been deleted")
 			return reconcile.Result{}, nil
 		}
-		log.Error(err, "Could not fetch Managedresource")
+		log.Error(err, "Could not fetch ManagedResource")
 		return reconcile.Result{}, err
 	}
 
@@ -287,7 +287,7 @@ func (r *Reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logg
 			var reason string
 			if deletionPending {
 				reason = "DeletionPending"
-				log.Error(err, "Deletion is still pending")
+				log.Info("Deletion is still pending", "err", err)
 			} else {
 				reason = "DeletionFailed"
 				log.Error(err, "Deletion of all resources failed")
@@ -300,11 +300,17 @@ func (r *Reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logg
 				return ctrl.Result{}, err
 			}
 
-			return ctrl.Result{}, err
+			if deletionPending {
+				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			} else {
+				return ctrl.Result{}, err
+			}
 		}
 	} else {
 		log.Info(fmt.Sprintf("Do not delete any resources of %s because .spec.keepObjects=true", mr.Name))
 	}
+
+	log.Info("All resources have been deleted, removing finalizers from ManagedResource and referenced Secrets")
 
 	for _, ref := range mr.Spec.SecretRefs {
 		secret := &corev1.Secret{}

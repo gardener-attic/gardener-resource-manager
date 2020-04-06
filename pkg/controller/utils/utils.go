@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -66,38 +67,60 @@ func NewGenericEvent(meta metav1.Object, obj runtime.Object) event.GenericEvent 
 
 // EnsureFinalizer ensures that a finalizer of the given name is set on the given object.
 // If the finalizer is not set, it adds it to the list of finalizers and updates the remote object.
-func EnsureFinalizer(ctx context.Context, client client.Client, finalizerName string, obj runtime.Object) error {
-	finalizers, accessor, err := finalizersAndAccessorOf(obj)
-	if err != nil {
-		return err
-	}
+func EnsureFinalizer(ctx context.Context, c client.Client, finalizerName string, obj runtime.Object) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		key, err := client.ObjectKeyFromObject(obj)
+		if err != nil {
+			return err
+		}
 
-	if finalizers.Has(finalizerName) {
-		return nil
-	}
+		if err := c.Get(ctx, key, obj); err != nil {
+			return err
+		}
 
-	finalizers.Insert(finalizerName)
-	accessor.SetFinalizers(finalizers.UnsortedList())
+		finalizers, accessor, err := finalizersAndAccessorOf(obj)
+		if err != nil {
+			return err
+		}
 
-	return client.Update(ctx, obj)
+		if finalizers.Has(finalizerName) {
+			return nil
+		}
+
+		finalizers.Insert(finalizerName)
+		accessor.SetFinalizers(finalizers.UnsortedList())
+
+		return c.Update(ctx, obj)
+	})
 }
 
 // DeleteFinalizer ensures that the given finalizer is not present anymore in the given object.
 // If it is set, it removes it and issues an update.
-func DeleteFinalizer(ctx context.Context, client client.Client, finalizerName string, obj runtime.Object) error {
-	finalizers, accessor, err := finalizersAndAccessorOf(obj)
-	if err != nil {
-		return err
-	}
+func DeleteFinalizer(ctx context.Context, c client.Client, finalizerName string, obj runtime.Object) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		key, err := client.ObjectKeyFromObject(obj)
+		if err != nil {
+			return err
+		}
 
-	if !finalizers.Has(finalizerName) {
-		return nil
-	}
+		if err := c.Get(ctx, key, obj); client.IgnoreNotFound(err) != nil {
+			return err
+		}
 
-	finalizers.Delete(finalizerName)
-	accessor.SetFinalizers(finalizers.UnsortedList())
+		finalizers, accessor, err := finalizersAndAccessorOf(obj)
+		if err != nil {
+			return err
+		}
 
-	return client.Update(ctx, obj)
+		if !finalizers.Has(finalizerName) {
+			return nil
+		}
+
+		finalizers.Delete(finalizerName)
+		accessor.SetFinalizers(finalizers.UnsortedList())
+
+		return c.Update(ctx, obj)
+	})
 }
 
 func finalizersAndAccessorOf(obj runtime.Object) (sets.String, metav1.Object, error) {
