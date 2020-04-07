@@ -23,6 +23,10 @@ import (
 	"sync"
 	"time"
 
+	hvpav1alpha1 "github.com/gardener/hvpa-controller/api/v1alpha1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
 	resourcesv1alpha1helper "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1/helper"
 	"github.com/gardener/gardener-resource-manager/pkg/controller/utils"
@@ -112,7 +116,8 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 		newResourcesObjectReferences []resourcesv1alpha1.ObjectReference
 		newResourcesSet              = sets.NewString()
 
-		existingResourcesIndex = NewObjectIndex(mr.Status.Resources, mr.Spec.Equivalences)
+		equivalences           = NewEquivalences(mr.Spec.Equivalences...)
+		existingResourcesIndex = NewObjectIndex(mr.Status.Resources, equivalences)
 
 		forceOverwriteLabels      bool
 		forceOverwriteAnnotations bool
@@ -248,7 +253,7 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 		return ctrl.Result{}, err
 	}
 
-	if err := r.applyNewResources(newResourcesObjects, mr.Spec.InjectLabels); err != nil {
+	if err := r.applyNewResources(newResourcesObjects, mr.Spec.InjectLabels, equivalences); err != nil {
 		log.Error(err, "Could not apply all new resources")
 
 		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, "ApplyFailed", err.Error())
@@ -333,7 +338,7 @@ func (r *Reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logg
 	return ctrl.Result{}, nil
 }
 
-func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInject map[string]string) error {
+func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInject map[string]string, equivalences Equivalences) error {
 	var (
 		results   = make(chan error)
 		wg        sync.WaitGroup
@@ -342,6 +347,14 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 		}
 	)
 
+	// get all HPA and HVPA targetRefs to check if we should prevent overwriting replicas and/or resource requirements.
+	// VPAs don't have to be checked, as they don't update the spec directly and only mutate Pods via a MutatingWebhook
+	// and therefore don't interfere with the resource manager.
+	horizontallyScaledObjects, verticallyScaledObjects, err := computeAllScaledObjectKeys(r.ctx, r.targetClient)
+	if err != nil {
+		return fmt.Errorf("failed to compute all HPA and HVPA target ref object keys: %w", err)
+	}
+
 	for _, o := range newResourcesObjects {
 		wg.Add(1)
 
@@ -349,11 +362,15 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 			defer wg.Done()
 
 			var (
-				current  = obj.obj.DeepCopy()
-				resource = unstructuredToString(obj.obj)
+				current            = obj.obj.DeepCopy()
+				resource           = unstructuredToString(obj.obj)
+				scaledHorizontally = isScaled(obj.obj, horizontallyScaledObjects, equivalences)
+				scaledVertically   = isScaled(obj.obj, verticallyScaledObjects, equivalences)
 			)
 
 			r.log.Info("Applying", "resource", resource)
+
+			// check if this object is scaled by
 
 			results <- retry.RetryOnConflict(retry.DefaultBackoff, func() (err error) {
 				if _, err := controllerutil.CreateOrUpdate(r.ctx, r.targetClient, current, func() error {
@@ -369,7 +386,7 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 					if err := injectLabels(obj.obj, labelsToInject); err != nil {
 						return err
 					}
-					return merge(obj.obj, current, obj.forceOverwriteLabels, obj.oldInformation.Labels, obj.forceOverwriteAnnotations, obj.oldInformation.Annotations)
+					return merge(obj.obj, current, obj.forceOverwriteLabels, obj.oldInformation.Labels, obj.forceOverwriteAnnotations, obj.oldInformation.Annotations, scaledHorizontally, scaledVertically)
 				}); err != nil {
 					if meta.IsNoMatchError(err) {
 						// Reset RESTMapper in case of cache misses.
@@ -402,6 +419,94 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 	}
 
 	return errorList.ErrorOrNil()
+}
+
+// computeAllScaledObjectKeys returns two sets containing object keys (in the form `Group/Kind/Namespace/Name`).
+// The first one contains keys to objects that are horizontally scaled by either an HPA or HVPA. And the
+// second one contains keys to objects that are vertically scaled by an HVPA.
+// VPAs are not checked, as they don't update the spec of Deployments/StatefulSets/... and only mutate resource
+// requirements via a MutatingWebhook. This way VPAs don't interfere with the resource manager and must not be considered.
+func computeAllScaledObjectKeys(ctx context.Context, c client.Client) (horizontallyScaledObjects, verticallyScaledObjects sets.String, err error) {
+	horizontallyScaledObjects = sets.NewString()
+	verticallyScaledObjects = sets.NewString()
+
+	// get all HPAs' targets
+	hpaList := &autoscalingv1.HorizontalPodAutoscalerList{}
+	if err := c.List(ctx, hpaList); err != nil && !meta.IsNoMatchError(err) {
+		return horizontallyScaledObjects, verticallyScaledObjects, fmt.Errorf("failed to list all HPAs: %w", err)
+	}
+
+	for _, hpa := range hpaList.Items {
+		if key, err := targetObjectKeyFromHPA(hpa); err != nil {
+			return horizontallyScaledObjects, verticallyScaledObjects, err
+		} else {
+			horizontallyScaledObjects.Insert(key)
+		}
+	}
+
+	// get all HVPAs' targets
+	hvpaList := &hvpav1alpha1.HvpaList{}
+	if err := c.List(ctx, hvpaList); err != nil && !meta.IsNoMatchError(err) {
+		return horizontallyScaledObjects, verticallyScaledObjects, fmt.Errorf("failed to list all HVPAs: %w", err)
+	}
+
+	for _, hvpa := range hvpaList.Items {
+		if key, err := targetObjectKeyFromHVPA(hvpa); err != nil {
+			return horizontallyScaledObjects, verticallyScaledObjects, err
+		} else {
+			if hvpa.Spec.Hpa.Deploy {
+				horizontallyScaledObjects.Insert(key)
+			}
+			if hvpa.Spec.Vpa.Deploy {
+				verticallyScaledObjects.Insert(key)
+			}
+		}
+	}
+
+	return horizontallyScaledObjects, verticallyScaledObjects, nil
+}
+
+func targetObjectKeyFromHPA(hpa autoscalingv1.HorizontalPodAutoscaler) (string, error) {
+	targetGV, err := schema.ParseGroupVersion(hpa.Spec.ScaleTargetRef.APIVersion)
+	if err != nil {
+		return "", fmt.Errorf("invalid API version in scaleTargetReference of HorizontalPodAutoscaler '%s/%s': %w", hpa.Namespace, hpa.Name, err)
+	}
+
+	return objectKey(targetGV.Group, hpa.Spec.ScaleTargetRef.Kind, hpa.Namespace, hpa.Spec.ScaleTargetRef.Name), nil
+}
+
+func targetObjectKeyFromHVPA(hvpa hvpav1alpha1.Hvpa) (string, error) {
+	targetGV, err := schema.ParseGroupVersion(hvpa.Spec.TargetRef.APIVersion)
+	if err != nil {
+		return "", fmt.Errorf("invalid API version in scaleTargetReference of HorizontalPodAutoscaler '%s/%s': %w", hvpa.Namespace, hvpa.Name, err)
+	}
+
+	return objectKey(targetGV.Group, hvpa.Spec.TargetRef.Kind, hvpa.Namespace, hvpa.Spec.TargetRef.Name), nil
+}
+
+func isScaled(obj *unstructured.Unstructured, scaledObjectKeys sets.String, equivalences Equivalences) bool {
+	key := objectKeyFromUnstructured(obj)
+
+	if scaledObjectKeys.Has(key) {
+		return true
+	}
+
+	// check if a HPA/HVPA targets this object via an equivalent API Group
+	gk := metav1.GroupKind{
+		Group: obj.GroupVersionKind().Group,
+		Kind:  obj.GetKind(),
+	}
+	for equivalentGroupKind := range equivalences.GetEquivalencesFor(gk) {
+		if scaledObjectKeys.Has(objectKey(equivalentGroupKind.Group, equivalentGroupKind.Kind, obj.GetNamespace(), obj.GetName())) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func objectKeyFromUnstructured(o *unstructured.Unstructured) string {
+	return objectKey(o.GroupVersionKind().Group, o.GetKind(), o.GetNamespace(), o.GetName())
 }
 
 func ignore(meta metav1.Object) bool {
@@ -487,17 +592,6 @@ func tryUpdateManagedResourceStatus(
 		mr.Status.ObservedGeneration = mr.Generation
 		return nil
 	})
-}
-
-func objectKey(group, kind, namespace, name string) string {
-	if kind != "Namespace" && namespace == "" {
-		namespace = metav1.NamespaceDefault
-	}
-	return fmt.Sprintf("%s/%s/%s/%s", group, kind, namespace, name)
-}
-
-func objectKeyByReference(o resourcesv1alpha1.ObjectReference) string {
-	return objectKey(o.GroupVersionKind().Group, o.Kind, o.Namespace, o.Name)
 }
 
 func unstructuredToString(o *unstructured.Unstructured) string {
