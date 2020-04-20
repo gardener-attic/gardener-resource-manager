@@ -23,13 +23,12 @@ import (
 	"sync"
 	"time"
 
-	hvpav1alpha1 "github.com/gardener/hvpa-controller/api/v1alpha1"
-
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
 	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources"
 	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources/health"
 	logpkg "github.com/gardener/gardener-resource-manager/pkg/log"
 
+	hvpav1alpha1 "github.com/gardener/hvpa-controller/api/v1alpha1"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	corev1 "k8s.io/api/core/v1"
@@ -167,6 +166,7 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 					mgr.GetClient(),
 					targetClient,
 					targetRESTMapper,
+					targetScheme,
 					filter,
 					syncPeriod,
 				),

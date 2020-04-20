@@ -23,28 +23,27 @@ import (
 	"sync"
 	"time"
 
-	hvpav1alpha1 "github.com/gardener/hvpa-controller/api/v1alpha1"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
 	resourcesv1alpha1helper "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1/helper"
 	"github.com/gardener/gardener-resource-manager/pkg/controller/utils"
 
+	hvpav1alpha1 "github.com/gardener/hvpa-controller/api/v1alpha1"
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-multierror"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -62,14 +61,15 @@ type Reconciler struct {
 	client           client.Client
 	targetClient     client.Client
 	targetRESTMapper *restmapper.DeferredDiscoveryRESTMapper
+	targetScheme     *runtime.Scheme
 
 	class      *ClassFilter
 	syncPeriod time.Duration
 }
 
 // NewReconciler creates a new reconciler with the given target client.
-func NewReconciler(ctx context.Context, log logr.Logger, c, targetClient client.Client, targetRESTMapper *restmapper.DeferredDiscoveryRESTMapper, class *ClassFilter, syncPeriod time.Duration) *Reconciler {
-	return &Reconciler{ctx, log, c, targetClient, targetRESTMapper, class, syncPeriod}
+func NewReconciler(ctx context.Context, log logr.Logger, c, targetClient client.Client, targetRESTMapper *restmapper.DeferredDiscoveryRESTMapper, targetScheme *runtime.Scheme, class *ClassFilter, syncPeriod time.Duration) *Reconciler {
+	return &Reconciler{ctx, log, c, targetClient, targetRESTMapper, targetScheme, class, syncPeriod}
 }
 
 // Reconcile implements `reconcile.Reconciler`.
@@ -187,23 +187,25 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 				// look up scope of objects' kind to check, if we should default the namespace field
 				mapping, err := r.targetRESTMapper.RESTMapping(obj.GroupVersionKind().GroupKind(), obj.GroupVersionKind().Version)
 				if err != nil || mapping == nil {
-					if meta.IsNoMatchError(err) {
-						// Reset RESTMapper in case of cache misses.
-						r.targetRESTMapper.Reset()
-					}
-					log.Error(err, fmt.Sprintf("could not get rest mapping for %s '%s/%s'", obj.GetKind(), obj.GetNamespace(), obj.GetName()),
+					// Don't reset RESTMapper in case of cache misses. Most probably indicates, that the corresponding CRD is not yet applied.
+					// CRD might be applied later as part of the ManagedResource reconciliation
+					log.Info(fmt.Sprintf("could not get rest mapping for %s '%s/%s': %v", obj.GetKind(), obj.GetNamespace(), obj.GetName(), err),
 						"secret", fmt.Sprintf("%s/%s", secret.Namespace, secret.Name), "secretKey", key, "objectIndexInFile", i)
-					return reconcile.Result{}, err
-				}
 
-				if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
-					// default namespace field to `default` in case of namespaced kinds
-					if obj.GetNamespace() == "" {
+					// default namespace on a best effort basis
+					if obj.GetKind() != "Namespace" && obj.GetNamespace() == "" {
 						obj.SetNamespace(metav1.NamespaceDefault)
 					}
 				} else {
-					// unset namespace field in case of non-namespaced kinds
-					obj.SetNamespace("")
+					if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
+						// default namespace field to `default` in case of namespaced kinds
+						if obj.GetNamespace() == "" {
+							obj.SetNamespace(metav1.NamespaceDefault)
+						}
+					} else {
+						// unset namespace field in case of non-namespaced kinds
+						obj.SetNamespace("")
+					}
 				}
 
 				var (
@@ -219,7 +221,8 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 							Name:       newObj.obj.GetName(),
 							Namespace:  newObj.obj.GetNamespace(),
 						},
-						Labels: mergeMaps(newObj.obj.GetLabels(), mr.Spec.InjectLabels),
+						Labels:      mergeMaps(newObj.obj.GetLabels(), mr.Spec.InjectLabels),
+						Annotations: newObj.obj.GetAnnotations(),
 					}
 				)
 
@@ -345,6 +348,7 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 		errorList = &multierror.Error{
 			ErrorFormat: utils.NewErrorFormatFuncWithPrefix("Could not apply all new resources"),
 		}
+		encounteredNoMatchError = false
 	)
 
 	// get all HPA and HVPA targetRefs to check if we should prevent overwriting replicas and/or resource requirements.
@@ -362,37 +366,40 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 			defer wg.Done()
 
 			var (
-				current            = obj.obj.DeepCopy()
 				resource           = unstructuredToString(obj.obj)
 				scaledHorizontally = isScaled(obj.obj, horizontallyScaledObjects, equivalences)
 				scaledVertically   = isScaled(obj.obj, verticallyScaledObjects, equivalences)
 			)
 
+			metadata, err := meta.Accessor(obj.obj)
+			if err != nil {
+				results <- fmt.Errorf("error getting metadata of object %q: %s", resource, err)
+				return
+			}
+			// if the ignore annotation is set to false, do nothing (ignore the resource)
+			if ignore(metadata) {
+				return
+			}
+
+			if err := injectLabels(obj.obj, labelsToInject); err != nil {
+				results <- fmt.Errorf("error injecting labels into object %q: %s", resource, err)
+				return
+			}
+
+			current := &unstructured.Unstructured{}
+			current.SetAPIVersion(obj.obj.GetAPIVersion())
+			current.SetKind(obj.obj.GetKind())
+			current.SetNamespace(obj.obj.GetNamespace())
+			current.SetName(obj.obj.GetName())
+
 			r.log.Info("Applying", "resource", resource)
 
-			// check if this object is scaled by
-
-			results <- retry.RetryOnConflict(retry.DefaultBackoff, func() (err error) {
-				if _, err := controllerutil.CreateOrUpdate(r.ctx, r.targetClient, current, func() error {
-					metadata, err := meta.Accessor(obj.obj)
-					if err != nil {
-						return err
-					}
-					// if the reconcile annotation is set to false, do nothing (ignore the resource)
-					if ignore(metadata) {
-						return nil
-					}
-
-					if err := injectLabels(obj.obj, labelsToInject); err != nil {
-						return err
-					}
+			results <- retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+				if err := utils.TypedCreateOrUpdate(r.ctx, r.targetClient, r.targetScheme, current, func() error {
 					return merge(obj.obj, current, obj.forceOverwriteLabels, obj.oldInformation.Labels, obj.forceOverwriteAnnotations, obj.oldInformation.Annotations, scaledHorizontally, scaledVertically)
 				}); err != nil {
 					if meta.IsNoMatchError(err) {
-						// Reset RESTMapper in case of cache misses.
-						// TODO: Remove this as soon as https://github.com/kubernetes-sigs/controller-runtime/pull/554
-						// has been merged and released.
-						r.targetRESTMapper.Reset()
+						encounteredNoMatchError = true
 					}
 					if apierrors.IsConflict(err) {
 						r.log.Info(fmt.Sprintf("conflict during apply of object %q: %s", resource, err))
@@ -416,6 +423,13 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 		if err != nil {
 			errorList = multierror.Append(errorList, err)
 		}
+	}
+
+	if encounteredNoMatchError {
+		// Reset RESTMapper in case of cache misses (e.g. CRD not found),
+		// but only reset once per reconcile, MR may contain multiple CRs of CRDs, that don't exist yet
+		// and we don't want to issue too many discovery requests, that would anyways probably still not contain the CRD
+		r.targetRESTMapper.Reset()
 	}
 
 	return errorList.ErrorOrNil()
