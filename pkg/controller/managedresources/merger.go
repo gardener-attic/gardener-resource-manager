@@ -197,6 +197,11 @@ func mergeStatefulSet(scheme *runtime.Scheme, oldObj, newObj runtime.Object, pre
 		newStatefulSet.Spec.Replicas = oldStatefulSet.Spec.Replicas
 	}
 
+	// Do not overwrite a StatefulSet's '.spec.volumeClaimTemplates' field once the StatefulSet has been created as it is immutable
+	if !oldStatefulSet.CreationTimestamp.IsZero() {
+		newStatefulSet.Spec.VolumeClaimTemplates = oldStatefulSet.Spec.VolumeClaimTemplates
+	}
+
 	mergePodTemplate(&oldStatefulSet.Spec.Template, &oldStatefulSet.Spec.Template, preserveResources)
 
 	return scheme.Convert(newStatefulSet, newObj, nil)

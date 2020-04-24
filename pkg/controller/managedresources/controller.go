@@ -260,6 +260,13 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 		return ctrl.Result{}, err
 	}
 
+	conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, "ApplyProgressing", "The resources are currently being applied.")
+	newConditions := resourcesv1alpha1helper.MergeConditions(mr.Status.Conditions, conditionResourcesApplied)
+	if err := tryUpdateManagedResourceStatus(r.ctx, r.client, mr, newConditions, mr.Status.Resources); err != nil {
+		log.Error(err, "Could not update the ManagedResource status")
+		return ctrl.Result{}, err
+	}
+
 	if err := r.applyNewResources(newResourcesObjects, mr.Spec.InjectLabels, equivalences); err != nil {
 		log.Error(err, "Could not apply all new resources")
 
@@ -278,7 +285,7 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 	} else {
 		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionTrue, "ApplySucceeded", "All resources are applied.")
 	}
-	newConditions := resourcesv1alpha1helper.MergeConditions(mr.Status.Conditions, conditionResourcesApplied)
+	newConditions = resourcesv1alpha1helper.MergeConditions(mr.Status.Conditions, conditionResourcesApplied)
 	if err := tryUpdateManagedResourceStatus(r.ctx, r.client, mr, newConditions, newResourcesObjectReferences); err != nil {
 		log.Error(err, "Could not update the ManagedResource status")
 		return ctrl.Result{}, err
@@ -295,6 +302,14 @@ func (r *Reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logg
 
 	if keepObjects := mr.Spec.KeepObjects; keepObjects == nil || !*keepObjects {
 		existingResourcesIndex := NewObjectIndex(mr.Status.Resources, nil)
+
+		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, "DeletionProgressing", conditionResourcesApplied.Message)
+		newConditions := resourcesv1alpha1helper.MergeConditions(mr.Status.Conditions, conditionResourcesApplied)
+		if err := tryUpdateManagedResourceStatus(r.ctx, r.client, mr, newConditions, mr.Status.Resources); err != nil {
+			log.Error(err, "Could not update the ManagedResource status")
+			return ctrl.Result{}, err
+		}
+
 		if deletionPending, err := r.cleanOldResources(existingResourcesIndex); err != nil {
 			var reason string
 			if deletionPending {
@@ -620,14 +635,22 @@ func unstructuredToString(o *unstructured.Unstructured) string {
 	return objectKey(o.GetAPIVersion(), o.GetKind(), o.GetNamespace(), o.GetName())
 }
 
+// injectLabels injects the given labels into the given object's metadata and if present also into the
+// pod template's and volume claims templates' metadata
 func injectLabels(obj *unstructured.Unstructured, labels map[string]string) error {
-	if labels == nil {
+	if len(labels) == 0 {
 		return nil
 	}
-	if err := unstructured.SetNestedField(obj.Object, mergeLabels(obj.GetLabels(), labels), "metadata", "labels"); err != nil {
+	obj.SetLabels(mergeMaps(obj.GetLabels(), labels))
+
+	if err := injectLabelsIntoPodTemplate(obj, labels); err != nil {
 		return err
 	}
 
+	return injectLabelsIntoVolumeClaimTemplate(obj, labels)
+}
+
+func injectLabelsIntoPodTemplate(obj *unstructured.Unstructured, labels map[string]string) error {
 	_, found, err := unstructured.NestedMap(obj.Object, "spec", "template")
 	if err != nil {
 		return err
@@ -642,6 +665,34 @@ func injectLabels(obj *unstructured.Unstructured, labels map[string]string) erro
 	}
 
 	return unstructured.SetNestedField(obj.Object, mergeLabels(templateLabels, labels), "spec", "template", "metadata", "labels")
+}
+
+func injectLabelsIntoVolumeClaimTemplate(obj *unstructured.Unstructured, labels map[string]string) error {
+	volumeClaimTemplates, templatesFound, err := unstructured.NestedSlice(obj.Object, "spec", "volumeClaimTemplates")
+	if err != nil {
+		return err
+	}
+	if !templatesFound {
+		return nil
+	}
+
+	for i, t := range volumeClaimTemplates {
+		template, ok := t.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("failed to inject labels into .spec.volumeClaimTemplates[%d], is not a map[string]interface{}", i)
+		}
+
+		templateLabels, _, err := unstructured.NestedStringMap(template, "metadata", "labels")
+		if err != nil {
+			return err
+		}
+
+		if err := unstructured.SetNestedField(template, mergeLabels(templateLabels, labels), "metadata", "labels"); err != nil {
+			return err
+		}
+	}
+
+	return unstructured.SetNestedSlice(obj.Object, volumeClaimTemplates, "spec", "volumeClaimTemplates")
 }
 
 func mergeLabels(existingLabels, newLabels map[string]string) map[string]interface{} {
@@ -667,6 +718,7 @@ func stringMapToInterfaceMap(in map[string]string) map[string]interface{} {
 	return m
 }
 
+// mergeMaps merges the two string maps. If a key is present in both maps, the value in the second map takes precedence
 func mergeMaps(one, two map[string]string) map[string]string {
 	out := make(map[string]string, len(one)+len(two))
 	for k, v := range one {
