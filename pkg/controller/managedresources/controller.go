@@ -54,6 +54,10 @@ const (
 	FinalizerName = "resources.gardener.cloud/gardener-resource-manager"
 )
 
+var (
+	deletePropagationForeground = metav1.DeletePropagationForeground
+)
+
 // Reconciler contains information in order to reconcile instances of ManagedResource.
 type Reconciler struct {
 	ctx context.Context
@@ -546,7 +550,10 @@ func (r *Reconciler) cleanOldResources(index *ObjectIndex) (bool, error) {
 
 				resource := unstructuredToString(obj)
 				r.log.Info("Deleting", "resource", resource)
-				if err := r.targetClient.Delete(r.ctx, obj); err != nil {
+
+				// delete with DeletePropagationForeground to be sure to cleanup all resources (e.g. batch/v1beta1.CronJob
+				// defaults PropagationPolicy to Orphan for backwards compatibility, so it will orphan its Jobs)
+				if err := r.targetClient.Delete(r.ctx, obj, &client.DeleteOptions{PropagationPolicy: &deletePropagationForeground}); err != nil {
 					if !apierrors.IsNotFound(err) {
 						r.log.Error(err, "Error during deletion", "resource", resource)
 						results <- &output{resource, true, err}
