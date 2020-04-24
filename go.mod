@@ -27,6 +27,7 @@ require (
 	k8s.io/api v0.0.0-20190918155943-95b840bb6a1f // kubernetes-1.16.0
 	k8s.io/apiextensions-apiserver v0.0.0-20190918161926-8f644eb6e783 // kubernetes-1.16.0
 	k8s.io/apimachinery v0.0.0-20190913080033-27d36303b655 // kubernetes-1.16.0
+	k8s.io/autoscaler v0.0.0-20190805135949-100e91ba756e
 	k8s.io/client-go v11.0.1-0.20190409021438-1a26190bd76a+incompatible // kubernetes-1.16.0
 	k8s.io/code-generator v0.0.0-20190912054826-cd179ad6a269 // kubernetes-1.16.0
 	k8s.io/gengo v0.0.0-20190826232639-a874a240740c // indirect

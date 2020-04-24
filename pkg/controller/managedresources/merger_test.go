@@ -15,6 +15,8 @@
 package managedresources
 
 import (
+	"time"
+
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -35,17 +37,30 @@ var _ = Describe("merger", func() {
 	Describe("#merge", func() {
 		var (
 			current, desired *unstructured.Unstructured
-			s                *runtime.Scheme
 		)
 
 		BeforeEach(func() {
-			s = runtime.NewScheme()
-			Expect(batchv1.AddToScheme(s)).ToNot(HaveOccurred(), "schema add should succeed")
-
 			oldPod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					ResourceVersion: "foo",
-					Finalizers:      []string{"finalizer"},
+					ResourceVersion:            "123",
+					Finalizers:                 []string{"finalizer"},
+					Name:                       "foo-abcdef",
+					Namespace:                  "bar",
+					Generation:                 42,
+					CreationTimestamp:          metav1.Time{Time: time.Now().Add(-1 * time.Hour)},
+					DeletionTimestamp:          &metav1.Time{Time: time.Now().Add(1 * time.Hour)},
+					UID:                        "8c3d49f6-e177-4938-8547-c61283a84876",
+					GenerateName:               "foo",
+					ClusterName:                "shoot",
+					DeletionGracePeriodSeconds: pointer.Int64Ptr(30),
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion:         "v1",
+						Kind:               "Namespace",
+						Name:               "default",
+						UID:                "18590d53-3e4d-4616-b411-88212dc69ac6",
+						Controller:         pointer.BoolPtr(true),
+						BlockOwnerDeletion: pointer.BoolPtr(true),
+					}},
 				},
 			}
 
@@ -58,22 +73,123 @@ var _ = Describe("merger", func() {
 			desired = current.DeepCopy()
 		})
 
-		It("should not overwrite current .metadata.resourceVersion", func() {
-			desired.SetResourceVersion("")
+		It("should not overwrite current .metadata", func() {
+			desired.Object["metadata"] = nil
 
 			expected := current.DeepCopy()
 
 			Expect(merge(desired, current, false, nil, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
-			Expect(current.GetResourceVersion()).To(Equal(expected.GetResourceVersion()))
+			Expect(current.Object["metadata"]).To(Equal(expected.Object["metadata"]))
 		})
 
-		It("should not overwrite current .metadata.finalizers", func() {
-			desired.SetFinalizers([]string{})
+		It("should force overwrite current .metadata.labels", func() {
+			current.SetLabels(map[string]string{"foo": "bar"})
+			desired.SetLabels(map[string]string{"other": "baz"})
+			existingLabels := map[string]string{"existing": "ignored"}
 
-			expected := current.DeepCopy()
+			expected := desired.DeepCopy()
 
-			Expect(merge(desired, current, false, nil, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
-			Expect(current.GetFinalizers()).To(Equal(expected.GetFinalizers()))
+			Expect(merge(desired, current, true, existingLabels, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(current.GetLabels()).To(Equal(expected.GetLabels()))
+		})
+
+		It("should merge current and desired .metadata.labels", func() {
+			current.SetLabels(map[string]string{"foo": "bar"})
+			desired.SetLabels(map[string]string{"other": "baz"})
+			existingLabels := map[string]string{"existing": "ignored"}
+
+			expected := desired.DeepCopy()
+			expected.SetLabels(map[string]string{
+				"foo":   "bar",
+				"other": "baz",
+			})
+
+			Expect(merge(desired, current, false, existingLabels, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(current.GetLabels()).To(Equal(expected.GetLabels()))
+		})
+
+		It("should remove labels from current .metadata.labels which have been remove from the mr secret", func() {
+			current.SetLabels(map[string]string{"foo": "bar"})
+			desired.SetLabels(map[string]string{"other": "baz"})
+			existingLabels := map[string]string{"foo": "bar"} // foo: bar removed from specification in mr secret
+
+			expected := desired.DeepCopy()
+			expected.SetLabels(map[string]string{
+				"other": "baz",
+			})
+
+			Expect(merge(desired, current, false, existingLabels, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(current.GetLabels()).To(Equal(expected.GetLabels()))
+		})
+
+		It("should not remove labels from current .metadata.labels which have been remove from the mr secret but were changed", func() {
+			current.SetLabels(map[string]string{"foo": "changed"})
+			desired.SetLabels(map[string]string{"other": "baz"})
+			existingLabels := map[string]string{"foo": "bar"} // foo: bar removed from specification in mr secret
+
+			expected := desired.DeepCopy()
+			expected.SetLabels(map[string]string{
+				"foo":   "changed",
+				"other": "baz",
+			})
+
+			Expect(merge(desired, current, false, existingLabels, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(current.GetLabels()).To(Equal(expected.GetLabels()))
+		})
+
+		It("should force overwrite current .metadata.annotations", func() {
+			current.SetAnnotations(map[string]string{"foo": "bar"})
+			desired.SetAnnotations(map[string]string{"other": "baz"})
+			existingAnnotations := map[string]string{"existing": "ignored"}
+
+			expected := desired.DeepCopy()
+
+			Expect(merge(desired, current, false, nil, true, existingAnnotations, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(current.GetAnnotations()).To(Equal(expected.GetAnnotations()))
+		})
+
+		It("should merge current and desired .metadata.annotations", func() {
+			current.SetAnnotations(map[string]string{"foo": "bar"})
+			desired.SetAnnotations(map[string]string{"other": "baz"})
+			existingAnnotations := map[string]string{"existing": "ignored"}
+
+			expected := desired.DeepCopy()
+			expected.SetAnnotations(map[string]string{
+				"foo":   "bar",
+				"other": "baz",
+			})
+
+			Expect(merge(desired, current, false, nil, false, existingAnnotations, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(current.GetAnnotations()).To(Equal(expected.GetAnnotations()))
+		})
+
+		It("should remove annotations from current .metadata.annotations which were once specified in the mr secret", func() {
+			current.SetAnnotations(map[string]string{"foo": "bar"})
+			desired.SetAnnotations(map[string]string{"other": "baz"})
+			existingAnnotations := map[string]string{"foo": "bar"} // foo: bar removed from specification in mr secret
+
+			expected := desired.DeepCopy()
+			expected.SetAnnotations(map[string]string{
+				"other": "baz",
+			})
+
+			Expect(merge(desired, current, false, nil, false, existingAnnotations, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(current.GetAnnotations()).To(Equal(expected.GetAnnotations()))
+		})
+
+		It("should not remove annotations from current .metadata.annotations which have been remove from the mr secret but were changed", func() {
+			current.SetAnnotations(map[string]string{"foo": "changed"})
+			desired.SetAnnotations(map[string]string{"other": "baz"})
+			existingAnnotations := map[string]string{"foo": "bar"} // foo: bar removed from specification in mr secret
+
+			expected := desired.DeepCopy()
+			expected.SetAnnotations(map[string]string{
+				"foo":   "changed",
+				"other": "baz",
+			})
+
+			Expect(merge(desired, current, false, nil, false, existingAnnotations, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(current.GetAnnotations()).To(Equal(expected.GetAnnotations()))
 		})
 
 		It("should keep current .status if it is not empty", func() {
