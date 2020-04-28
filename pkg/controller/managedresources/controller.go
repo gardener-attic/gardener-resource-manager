@@ -261,7 +261,12 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 		return ctrl.Result{}, err
 	}
 
-	conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, "ApplyProgressing", "The resources are currently being applied.")
+	msg := "The resources are currently being applied."
+	if conditionResourcesApplied.Reason == "ApplyFailed" {
+		// keep condition message if last apply failed
+		msg = conditionResourcesApplied.Message
+	}
+	conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, conditionResourcesApplied.Status, "ApplyProgressing", msg)
 	newConditions := resourcesv1alpha1helper.MergeConditions(mr.Status.Conditions, conditionResourcesApplied)
 	if err := tryUpdateManagedResourceStatus(r.ctx, r.client, mr, newConditions, mr.Status.Resources); err != nil {
 		log.Error(err, "Could not update the ManagedResource status")
@@ -304,7 +309,13 @@ func (r *Reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logg
 	if keepObjects := mr.Spec.KeepObjects; keepObjects == nil || !*keepObjects {
 		existingResourcesIndex := NewObjectIndex(mr.Status.Resources, nil)
 
-		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, "DeletionProgressing", conditionResourcesApplied.Message)
+		msg := "The resources are currently being deleted."
+		switch conditionResourcesApplied.Reason {
+		case "DeletionPending", "DeletionFailed":
+			// keep condition message if deletion is pending / failed
+			msg = conditionResourcesApplied.Message
+		}
+		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, "DeletionProgressing", msg)
 		newConditions := resourcesv1alpha1helper.MergeConditions(mr.Status.Conditions, conditionResourcesApplied)
 		if err := tryUpdateManagedResourceStatus(r.ctx, r.client, mr, newConditions, mr.Status.Resources); err != nil {
 			log.Error(err, "Could not update the ManagedResource status")
