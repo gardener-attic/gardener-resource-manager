@@ -347,6 +347,51 @@ var _ = Describe("merger", func() {
 			Expect(mergeStatefulSet(s, old, new, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(new).To(Equal(expected))
 		})
+
+		It("should use new .spec.replicas if preserveReplicas is false", func() {
+			new.Spec.Replicas = pointer.Int32Ptr(2)
+
+			expected := new.DeepCopy()
+
+			Expect(mergeStatefulSet(s, old, new, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(new).To(Equal(expected))
+		})
+
+		It("should use new .spec.volumeClaimTemplates if the StatefulSet has not been created yet", func() {
+			new.Spec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{
+				{
+					Spec: corev1.PersistentVolumeClaimSpec{
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						VolumeName:       "pvc-foo",
+						StorageClassName: pointer.StringPtr("ultra-fast"),
+					},
+				},
+			}
+
+			expected := new.DeepCopy()
+
+			Expect(mergeStatefulSet(s, old, new, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(new).To(Equal(expected))
+		})
+
+		It("should not overwrite old .spec.volumeClaimTemplates if the StatefulSet has already been created", func() {
+			old.CreationTimestamp = metav1.Time{Time: time.Now()}
+			new.Spec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{
+				{
+					Spec: corev1.PersistentVolumeClaimSpec{
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						VolumeName:       "pvc-foo",
+						StorageClassName: pointer.StringPtr("ultra-fast"),
+					},
+				},
+			}
+
+			expected := new.DeepCopy()
+			expected.Spec.VolumeClaimTemplates = nil
+
+			Expect(mergeStatefulSet(s, old, new, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(new).To(Equal(expected))
+		})
 	})
 
 	Describe("#mergeContainer", func() {
