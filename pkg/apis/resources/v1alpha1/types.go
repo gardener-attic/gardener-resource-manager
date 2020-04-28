@@ -69,6 +69,10 @@ type ManagedResourceSpec struct {
 	// Equivalences specifies possible group/kind equivalences for objects.
 	// +optional
 	Equivalences [][]metav1.GroupKind `json:"equivalences,omitempty"`
+	// DeletePersistentVolumeClaims specifies if PersistentVolumeClaims created by StatefulSets, which are managed by this
+	// resource, should also be deleted when the corresponding StatefulSet is deleted (defaults to false).
+	// +optional
+	DeletePersistentVolumeClaims *bool `json:"deletePersistentVolumeClaims,omitempty"`
 }
 
 // ManagedResourceStatus is the status of a managed resource.

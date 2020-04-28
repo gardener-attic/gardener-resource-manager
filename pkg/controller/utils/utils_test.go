@@ -122,7 +122,7 @@ var _ = Describe("utils", func() {
 					})
 
 				err := TypedCreateOrUpdate(ctx, c, s, obj, func() error {
-					Expect(obj).To(BeSemanticallyEqual(currentDeploymentUnstructured), "obj should be filled with the obj's current spec")
+					Expect(obj).To(BeSemanticallyEqualTo(currentDeploymentUnstructured), "obj should be filled with the obj's current spec")
 					return nil
 				})
 
@@ -143,7 +143,7 @@ var _ = Describe("utils", func() {
 				)
 
 				err := TypedCreateOrUpdate(ctx, c, s, obj, func() error {
-					Expect(obj).To(BeSemanticallyEqual(currentDeploymentUnstructured), "obj should be filled with the obj's current spec")
+					Expect(obj).To(BeSemanticallyEqualTo(currentDeploymentUnstructured), "obj should be filled with the obj's current spec")
 
 					// mutate object
 					obj.SetLabels(map[string]string{
@@ -214,7 +214,7 @@ var _ = Describe("utils", func() {
 					})
 
 				err := TypedCreateOrUpdate(ctx, c, s, obj, func() error {
-					Expect(obj).To(BeSemanticallyEqual(currentVPAUnstructured), "obj should be filled with the obj's current spec")
+					Expect(obj).To(BeSemanticallyEqualTo(currentVPAUnstructured), "obj should be filled with the obj's current spec")
 					return nil
 				})
 
@@ -235,7 +235,7 @@ var _ = Describe("utils", func() {
 				)
 
 				err := TypedCreateOrUpdate(ctx, c, s, obj, func() error {
-					Expect(obj).To(BeSemanticallyEqual(currentVPAUnstructured), "obj should be filled with the obj's current spec")
+					Expect(obj).To(BeSemanticallyEqualTo(currentVPAUnstructured), "obj should be filled with the obj's current spec")
 
 					// mutate object
 					obj.SetLabels(map[string]string{

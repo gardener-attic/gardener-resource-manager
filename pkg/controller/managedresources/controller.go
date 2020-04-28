@@ -17,6 +17,7 @@ package managedresources
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -240,7 +241,7 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 		}
 	}
 
-	if deletionPending, err := r.cleanOldResources(existingResourcesIndex); err != nil {
+	if deletionPending, err := r.cleanOldResources(existingResourcesIndex, mr); err != nil {
 		var reason string
 		if deletionPending {
 			reason = "DeletionPending"
@@ -310,7 +311,7 @@ func (r *Reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logg
 			return ctrl.Result{}, err
 		}
 
-		if deletionPending, err := r.cleanOldResources(existingResourcesIndex); err != nil {
+		if deletionPending, err := r.cleanOldResources(existingResourcesIndex, mr); err != nil {
 			var reason string
 			if deletionPending {
 				reason = "DeletionPending"
@@ -549,7 +550,7 @@ func ignore(meta metav1.Object) bool {
 	return annotationExists && ignoreSet
 }
 
-func (r *Reconciler) cleanOldResources(index *ObjectIndex) (bool, error) {
+func (r *Reconciler) cleanOldResources(index *ObjectIndex, mr *resourcesv1alpha1.ManagedResource) (bool, error) {
 	type output struct {
 		resource        string
 		deletionPending bool
@@ -559,6 +560,7 @@ func (r *Reconciler) cleanOldResources(index *ObjectIndex) (bool, error) {
 	var (
 		results         = make(chan *output)
 		wg              sync.WaitGroup
+		deletePVCs      = mr.Spec.DeletePersistentVolumeClaims != nil && *mr.Spec.DeletePersistentVolumeClaims
 		deletionPending = false
 		errorList       = &multierror.Error{
 			ErrorFormat: utils.NewErrorFormatFuncWithPrefix("Could not clean all old resources"),
@@ -580,10 +582,29 @@ func (r *Reconciler) cleanOldResources(index *ObjectIndex) (bool, error) {
 				resource := unstructuredToString(obj)
 				r.log.Info("Deleting", "resource", resource)
 
+				// get object before deleting to be able to do cleanup work for it
+				if err := r.targetClient.Get(r.ctx, client.ObjectKey{Namespace: ref.Namespace, Name: ref.Name}, obj); err != nil {
+					if !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+						r.log.Error(err, "Error during deletion", "resource", resource)
+						results <- &output{resource, true, err}
+						return
+					}
+
+					// resource already deleted, nothing to do here
+					results <- &output{resource, false, nil}
+					return
+				}
+
+				if err := cleanup(r.ctx, r.targetClient, r.targetScheme, obj, deletePVCs); err != nil {
+					r.log.Error(err, "Error during cleanup", "resource", resource)
+					results <- &output{resource: resource, deletionPending: true, err: err}
+					return
+				}
+
 				// delete with DeletePropagationForeground to be sure to cleanup all resources (e.g. batch/v1beta1.CronJob
 				// defaults PropagationPolicy to Orphan for backwards compatibility, so it will orphan its Jobs)
 				if err := r.targetClient.Delete(r.ctx, obj, &client.DeleteOptions{PropagationPolicy: &deletePropagationForeground}); err != nil {
-					if !apierrors.IsNotFound(err) {
+					if !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
 						r.log.Error(err, "Error during deletion", "resource", resource)
 						results <- &output{resource, true, err}
 						return
@@ -604,7 +625,11 @@ func (r *Reconciler) cleanOldResources(index *ObjectIndex) (bool, error) {
 	for out := range results {
 		if out.deletionPending {
 			deletionPending = true
-			errorList = multierror.Append(errorList, fmt.Errorf("deletion of old resource %q is still pending", out.resource))
+			errMsg := fmt.Sprintf("deletion of old resource %q is still pending", out.resource)
+			if out.err != nil {
+				errMsg = fmt.Sprintf("%s: %v", errMsg, out.err)
+			}
+			errorList = multierror.Append(errorList, errors.New(errMsg))
 			continue
 		}
 
