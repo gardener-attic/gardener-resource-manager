@@ -402,21 +402,6 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 				scaledVertically   = isScaled(obj.obj, verticallyScaledObjects, equivalences)
 			)
 
-			metadata, err := meta.Accessor(obj.obj)
-			if err != nil {
-				results <- fmt.Errorf("error getting metadata of object %q: %s", resource, err)
-				return
-			}
-			// if the ignore annotation is set to false, do nothing (ignore the resource)
-			if ignore(metadata) {
-				return
-			}
-
-			if err := injectLabels(obj.obj, labelsToInject); err != nil {
-				results <- fmt.Errorf("error injecting labels into object %q: %s", resource, err)
-				return
-			}
-
 			current := &unstructured.Unstructured{}
 			current.SetAPIVersion(obj.obj.GetAPIVersion())
 			current.SetKind(obj.obj.GetKind())
@@ -427,6 +412,19 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 
 			results <- retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 				if err := utils.TypedCreateOrUpdate(r.ctx, r.targetClient, r.targetScheme, current, func() error {
+					metadata, err := meta.Accessor(obj.obj)
+					if err != nil {
+						return fmt.Errorf("error getting metadata of object %q: %s", resource, err)
+					}
+					// if the ignore annotation is set to false, do nothing (ignore the resource)
+					if ignore(metadata) {
+						return nil
+					}
+
+					if err := injectLabels(obj.obj, labelsToInject); err != nil {
+						return fmt.Errorf("error injecting labels into object %q: %s", resource, err)
+					}
+
 					return merge(obj.obj, current, obj.forceOverwriteLabels, obj.oldInformation.Labels, obj.forceOverwriteAnnotations, obj.oldInformation.Annotations, scaledHorizontally, scaledVertically)
 				}); err != nil {
 					if meta.IsNoMatchError(err) {
