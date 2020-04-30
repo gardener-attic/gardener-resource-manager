@@ -63,3 +63,4 @@ spec:
 # forceOverwriteLabels: false
 # forceOverwriteAnnotations: false
 # keepObjects: false
+# deletePersistentVolumeClaims: false

@@ -22,9 +22,9 @@ import (
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 )
 
-// BeSemanticallyEqual returns a matcher that matches if actual and expected are semantically equal
+// BeSemanticallyEqualTo returns a matcher that matches if actual and expected are semantically equal
 // by testing via apiequality.Semantic.DeepEqual().
-func BeSemanticallyEqual(expected interface{}) types.GomegaMatcher {
+func BeSemanticallyEqualTo(expected interface{}) types.GomegaMatcher {
 	return &semanticallyEqualMatcher{
 		expected: expected,
 	}

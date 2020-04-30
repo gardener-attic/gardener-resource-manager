@@ -19,6 +19,7 @@ import (
 
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
 	mockclient "github.com/gardener/gardener-resource-manager/pkg/mock/controller-runtime/client"
+	. "github.com/gardener/gardener-resource-manager/pkg/test"
 
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
@@ -26,6 +27,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -47,18 +49,26 @@ var _ = Describe("Resource Manager", func() {
 	Describe("Secrets", func() {
 		var ctx = context.TODO()
 
-		It("should create a managed secret ", func() {
+		It("should correctly create a managed secret", func() {
 			var (
 				secretName      = "foo"
 				secretNamespace = "bar"
+				secretLabels    = map[string]string{
+					"boo": "goo",
+				}
+				secretAnnotations = map[string]string{
+					"a": "b",
+				}
 
 				secretData = map[string][]byte{
 					"foo": []byte("bar"),
 				}
 
 				secretMeta = metav1.ObjectMeta{
-					Name:      secretName,
-					Namespace: secretNamespace,
+					Name:        secretName,
+					Namespace:   secretNamespace,
+					Annotations: secretAnnotations,
+					Labels:      secretLabels,
 				}
 				expectedSecret = &corev1.Secret{
 					ObjectMeta: secretMeta,
@@ -66,16 +76,20 @@ var _ = Describe("Resource Manager", func() {
 				}
 			)
 
-			managedSecret := NewSecret(c).WithNamespacedName(secretNamespace, secretName).WithKeyValues(secretData)
+			managedSecret := NewSecret(c).
+				WithNamespacedName(secretNamespace, secretName).
+				WithKeyValues(secretData).
+				WithLabels(secretLabels).
+				WithAnnotations(secretAnnotations)
 			Expect(managedSecret.secret).To(Equal(expectedSecret))
 
 			c.EXPECT().Get(ctx, client.ObjectKey{Namespace: secretNamespace, Name: secretName}, gomock.AssignableToTypeOf(&corev1.Secret{})).DoAndReturn(func(_ context.Context, _ client.ObjectKey, secret *corev1.Secret) error {
 				return apierrors.NewNotFound(corev1.Resource("secrets"), secretName)
 			})
 
+			expectedSecret.Type = corev1.SecretTypeOpaque
 			c.EXPECT().Create(ctx, gomock.AssignableToTypeOf(&corev1.Secret{})).DoAndReturn(func(_ context.Context, secret *corev1.Secret) error {
-				secret.ObjectMeta = secretMeta
-				secret.Data = secretData
+				Expect(secret).To(BeSemanticallyEqualTo(expectedSecret))
 				return nil
 			})
 
@@ -83,42 +97,74 @@ var _ = Describe("Resource Manager", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should create a managed resource ", func() {
+		It("should correctly create a managed resource", func() {
 			var (
 				managedResourceName      = "foo"
 				managedResourceNamespace = "bar"
-
-				managedResourceMeta = metav1.ObjectMeta{
-					Name:      managedResourceName,
-					Namespace: managedResourceNamespace,
+				managedResourceLabels    = map[string]string{
+					"boo": "goo",
+				}
+				managedResourceAnnotations = map[string]string{
+					"a": "b",
 				}
 
-				secretRefs = []corev1.LocalObjectReference{
+				managedResourceMeta = metav1.ObjectMeta{
+					Name:        managedResourceName,
+					Namespace:   managedResourceNamespace,
+					Labels:      managedResourceLabels,
+					Annotations: managedResourceAnnotations,
+				}
+
+				resourceClass = "shoot"
+				secretRefs    = []corev1.LocalObjectReference{
 					{Name: "test1"},
 					{Name: "test2"},
+					{Name: "test3"},
 				}
 
 				injectedLabels = map[string]string{
 					"shoot.gardener.cloud/no-cleanup": "true",
 				}
 
+				forceOverwriteAnnotations    = true
+				forceOverwriteLabels         = true
+				keepObjects                  = true
+				deletePersistentVolumeClaims = true
+
 				expectedManagedResource = &resourcesv1alpha1.ManagedResource{
 					ObjectMeta: managedResourceMeta,
 					Spec: resourcesv1alpha1.ManagedResourceSpec{
-						SecretRefs:   secretRefs,
-						InjectLabels: injectedLabels,
+						SecretRefs:                   secretRefs,
+						InjectLabels:                 injectedLabels,
+						Class:                        pointer.StringPtr(resourceClass),
+						ForceOverwriteAnnotations:    pointer.BoolPtr(forceOverwriteAnnotations),
+						ForceOverwriteLabels:         pointer.BoolPtr(forceOverwriteLabels),
+						KeepObjects:                  pointer.BoolPtr(keepObjects),
+						DeletePersistentVolumeClaims: pointer.BoolPtr(deletePersistentVolumeClaims),
 					},
 				}
 			)
 
-			managedResource := NewManagedResource(c).WithNamespacedName(managedResourceNamespace, managedResourceName).WithSecretRefs(secretRefs).WithInjectedLabels(injectedLabels)
+			managedResource := NewManagedResource(c).
+				WithNamespacedName(managedResourceNamespace, managedResourceName).
+				WithLabels(managedResourceLabels).
+				WithAnnotations(managedResourceAnnotations).
+				WithClass(resourceClass).
+				WithSecretRef(secretRefs[0].Name).
+				WithSecretRefs(secretRefs[1:]).
+				WithInjectedLabels(injectedLabels).
+				ForceOverwriteAnnotations(forceOverwriteAnnotations).
+				ForceOverwriteLabels(forceOverwriteLabels).
+				KeepObjects(keepObjects).
+				DeletePersistentVolumeClaims(deletePersistentVolumeClaims)
 			Expect(managedResource.resource).To(Equal(expectedManagedResource))
 
 			c.EXPECT().Get(ctx, client.ObjectKey{Namespace: managedResourceNamespace, Name: managedResourceName}, gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResource{})).DoAndReturn(func(_ context.Context, _ client.ObjectKey, ms *resourcesv1alpha1.ManagedResource) error {
 				return apierrors.NewNotFound(corev1.Resource("managedresources"), managedResourceName)
 			})
 
-			c.EXPECT().Create(ctx, gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResource{})).Do(func(_ context.Context, ms *resourcesv1alpha1.ManagedResource) error {
+			c.EXPECT().Create(ctx, gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResource{})).DoAndReturn(func(_ context.Context, mr *resourcesv1alpha1.ManagedResource) error {
+				Expect(mr).To(BeSemanticallyEqualTo(expectedManagedResource))
 				return nil
 			})
 
