@@ -27,6 +27,7 @@ import (
 	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources"
 	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources/health"
 	logpkg "github.com/gardener/gardener-resource-manager/pkg/log"
+	managerpredicate "github.com/gardener/gardener-resource-manager/pkg/predicate"
 
 	hvpav1alpha1 "github.com/gardener/hvpa-controller/api/v1alpha1"
 	"github.com/spf13/cobra"
@@ -224,7 +225,11 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 						}})
 					},
 				},
-				filter, health.ClassChangedPredicate(),
+				filter, managerpredicate.Or(
+					managerpredicate.ClassChangedPredicate(),
+					// start health checks immediately after MR has been reconciled
+					managerpredicate.ConditionStatusChanged(resourcesv1alpha1.ResourcesApplied),
+				),
 			); err != nil {
 				return fmt.Errorf("unable to watch ManagedResources: %+v", err)
 			}

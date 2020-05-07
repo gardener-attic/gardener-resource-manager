@@ -68,13 +68,27 @@ func (r *HealthReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, nil // Do not requeue
 	}
 
+	// Initialize condition based on the current status.
+	conditionResourcesHealthy := resourcesv1alpha1helper.GetOrInitCondition(mr.Status.Conditions, resourcesv1alpha1.ResourcesHealthy)
+
 	if !mr.DeletionTimestamp.IsZero() {
+		conditionResourcesHealthy = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesHealthy, resourcesv1alpha1.ConditionFalse, resourcesv1alpha1.ConditionDeletionPending, "The resources are currently being deleted.")
+		if err := tryUpdateManagedResourceCondition(r.ctx, r.client, mr, conditionResourcesHealthy); err != nil {
+			log.Error(err, "Could not update the ManagedResource status")
+			return ctrl.Result{}, err
+		}
+
 		log.Info("Stopping health checks for ManagedResource, as it has been deleted (deletionTimestamp is set)")
 		return reconcile.Result{}, nil
 	}
 
-	// Initialize condition based on the current status.
-	conditionResourcesHealthy := resourcesv1alpha1helper.GetOrInitCondition(mr.Status.Conditions, resourcesv1alpha1.ResourcesHealthy)
+	// skip health checks until ManagedResource has been reconciled completely successfully to prevent writing
+	// falsy health condition (resources may need a second try to apply, e.g. CRDs and CRs in the same MR)
+	conditionResourcesApplied := resourcesv1alpha1helper.GetCondition(mr.Status.Conditions, resourcesv1alpha1.ResourcesApplied)
+	if conditionResourcesApplied == nil || conditionResourcesApplied.Status == resourcesv1alpha1.ConditionProgressing || conditionResourcesApplied.Status == resourcesv1alpha1.ConditionFalse {
+		log.Info("Skipping health checks for ManagedResource, as it is has not been reconciled successfully yet.")
+		return ctrl.Result{RequeueAfter: r.syncPeriod}, nil
+	}
 
 	resourcesObjectReferences := mr.Status.Resources
 	for _, ref := range resourcesObjectReferences {
