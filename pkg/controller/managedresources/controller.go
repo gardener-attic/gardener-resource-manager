@@ -436,6 +436,10 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 					}
 					// if the ignore annotation is set to false, do nothing (ignore the resource)
 					if ignore(metadata) {
+						anns := current.GetAnnotations()
+						delete(anns, descriptionAnnotation)
+
+						current.SetAnnotations(anns)
 						return nil
 					}
 
