@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package managedresources
+package mapper
 
 import (
 	"context"
@@ -30,7 +30,18 @@ import (
 
 type secretToManagedResourceMapper struct {
 	client     client.Client
+	ctx        context.Context
 	predicates []predicate.Predicate
+}
+
+func (m *secretToManagedResourceMapper) InjectClient(client client.Client) error {
+	m.client = client
+	return nil
+}
+
+func (m *secretToManagedResourceMapper) InjectStopChannel(stopCh <-chan struct{}) error {
+	m.ctx = utils.ContextFromStopChannel(stopCh)
+	return nil
 }
 
 func (m *secretToManagedResourceMapper) Map(obj handler.MapObject) []reconcile.Request {
@@ -44,7 +55,7 @@ func (m *secretToManagedResourceMapper) Map(obj handler.MapObject) []reconcile.R
 	}
 
 	managedResourceList := &resourcesv1alpha1.ManagedResourceList{}
-	if err := m.client.List(context.TODO(), managedResourceList, client.InNamespace(secret.Namespace)); err != nil {
+	if err := m.client.List(m.ctx, managedResourceList, client.InNamespace(secret.Namespace)); err != nil {
 		return nil
 	}
 
@@ -70,6 +81,6 @@ func (m *secretToManagedResourceMapper) Map(obj handler.MapObject) []reconcile.R
 
 // SecretToManagedResourceMapper returns a mapper that returns requests for ManagedResources whose
 // referenced secrets have been modified.
-func SecretToManagedResourceMapper(client client.Client, predicates ...predicate.Predicate) handler.Mapper {
-	return &secretToManagedResourceMapper{client, predicates}
+func SecretToManagedResourceMapper(predicates ...predicate.Predicate) handler.Mapper {
+	return &secretToManagedResourceMapper{predicates: predicates}
 }

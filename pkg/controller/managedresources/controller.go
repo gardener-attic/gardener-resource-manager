@@ -154,11 +154,6 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 			return reconcile.Result{}, err
 		}
 
-		if err := utils.EnsureFinalizer(r.ctx, r.client, r.class.FinalizerName(), secret); err != nil {
-			log.Error(err, "Failed to ensure finalizer on secret %q referenced by managed resource", "name", ref.Name)
-			return reconcile.Result{}, err
-		}
-
 		for key, value := range secret.Data {
 			var (
 				decoder    = yaml.NewYAMLOrJSONDecoder(bytes.NewReader(value), 1024)
@@ -367,19 +362,7 @@ func (r *Reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logg
 		log.Info(fmt.Sprintf("Do not delete any resources of %s because .spec.keepObjects=true", mr.Name))
 	}
 
-	log.Info("All resources have been deleted, removing finalizers from ManagedResource and referenced Secrets")
-
-	for _, ref := range mr.Spec.SecretRefs {
-		secret := &corev1.Secret{}
-		if err := r.client.Get(r.ctx, client.ObjectKey{Namespace: mr.Namespace, Name: ref.Name}, secret); err != nil {
-			log.Error(err, "Could not read secret", "name", secret.Name)
-			return reconcile.Result{}, err
-		}
-		if err := utils.DeleteFinalizer(r.ctx, r.client, r.class.FinalizerName(), secret); err != nil {
-			log.Error(err, "Failed to remove finalizer from secret referenced by managed resource", "name", ref.Name)
-			return reconcile.Result{}, err
-		}
-	}
+	log.Info("All resources have been deleted, removing finalizers from ManagedResource")
 
 	if err := utils.DeleteFinalizer(r.ctx, r.client, r.class.FinalizerName(), mr); err != nil {
 		log.Error(err, "Error removing finalizer from ManagedResource")
