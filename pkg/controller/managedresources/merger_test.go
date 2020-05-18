@@ -77,6 +77,7 @@ var _ = Describe("merger", func() {
 			desired.Object["metadata"] = nil
 
 			expected := current.DeepCopy()
+			addDescriptionAnnotations(expected)
 
 			Expect(merge(desired, current, false, nil, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.Object["metadata"]).To(Equal(expected.Object["metadata"]))
@@ -143,6 +144,7 @@ var _ = Describe("merger", func() {
 			existingAnnotations := map[string]string{"existing": "ignored"}
 
 			expected := desired.DeepCopy()
+			addDescriptionAnnotations(expected)
 
 			Expect(merge(desired, current, false, nil, true, existingAnnotations, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.GetAnnotations()).To(Equal(expected.GetAnnotations()))
@@ -158,6 +160,7 @@ var _ = Describe("merger", func() {
 				"foo":   "bar",
 				"other": "baz",
 			})
+			addDescriptionAnnotations(expected)
 
 			Expect(merge(desired, current, false, nil, false, existingAnnotations, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.GetAnnotations()).To(Equal(expected.GetAnnotations()))
@@ -172,6 +175,7 @@ var _ = Describe("merger", func() {
 			expected.SetAnnotations(map[string]string{
 				"other": "baz",
 			})
+			addDescriptionAnnotations(expected)
 
 			Expect(merge(desired, current, false, nil, false, existingAnnotations, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.GetAnnotations()).To(Equal(expected.GetAnnotations()))
@@ -187,6 +191,7 @@ var _ = Describe("merger", func() {
 				"foo":   "changed",
 				"other": "baz",
 			})
+			addDescriptionAnnotations(expected)
 
 			Expect(merge(desired, current, false, nil, false, existingAnnotations, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.GetAnnotations()).To(Equal(expected.GetAnnotations()))
@@ -842,3 +847,14 @@ var _ = Describe("merger", func() {
 		)
 	})
 })
+
+func addDescriptionAnnotations(obj *unstructured.Unstructured) {
+	ann := obj.GetAnnotations()
+
+	if ann == nil {
+		ann = make(map[string]string, 1)
+	}
+	ann[descriptionAnnotation] = descriptionAnnotationText
+
+	obj.SetAnnotations(ann)
+}
