@@ -58,8 +58,7 @@ func (r *HealthReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			log.Info("Stopping health checks for ManagedResource, as it has been deleted")
 			return reconcile.Result{}, nil
 		}
-		log.Error(err, "Could not fetch Managedresource")
-		return reconcile.Result{}, err
+		return reconcile.Result{}, fmt.Errorf("could not fetch ManagedResource: %+v", err)
 	}
 
 	// Check responsibility
@@ -74,8 +73,7 @@ func (r *HealthReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	if !mr.DeletionTimestamp.IsZero() {
 		conditionResourcesHealthy = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesHealthy, resourcesv1alpha1.ConditionFalse, resourcesv1alpha1.ConditionDeletionPending, "The resources are currently being deleted.")
 		if err := tryUpdateManagedResourceCondition(r.ctx, r.client, mr, conditionResourcesHealthy); err != nil {
-			log.Error(err, "Could not update the ManagedResource status")
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v ", err)
 		}
 
 		log.Info("Stopping health checks for ManagedResource, as it has been deleted (deletionTimestamp is set)")
@@ -118,8 +116,7 @@ func (r *HealthReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 				conditionResourcesHealthy = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesHealthy, resourcesv1alpha1.ConditionFalse, reason, message)
 				if err := tryUpdateManagedResourceCondition(r.ctx, r.client, mr, conditionResourcesHealthy); err != nil {
-					log.Error(err, "Could not update the ManagedResource status")
-					return ctrl.Result{}, err
+					return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v ", err)
 				}
 
 				return ctrl.Result{RequeueAfter: r.syncPeriod}, nil // We do not want to run in the exponential backoff for the condition check.
@@ -136,8 +133,7 @@ func (r *HealthReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 			conditionResourcesHealthy = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesHealthy, resourcesv1alpha1.ConditionFalse, reason, message)
 			if err := tryUpdateManagedResourceCondition(r.ctx, r.client, mr, conditionResourcesHealthy); err != nil {
-				log.Error(err, "Could not update the ManagedResource status")
-				return ctrl.Result{}, err
+				return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v ", err)
 			}
 
 			return ctrl.Result{RequeueAfter: r.syncPeriod}, nil // We do not want to run in the exponential backoff for the condition check.
@@ -146,8 +142,7 @@ func (r *HealthReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	conditionResourcesHealthy = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesHealthy, resourcesv1alpha1.ConditionTrue, "ResourcesHealthy", "All resources are healthy.")
 	if err := tryUpdateManagedResourceCondition(r.ctx, r.client, mr, conditionResourcesHealthy); err != nil {
-		log.Error(err, "Could not update the ManagedResource status")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v ", err)
 	}
 
 	log.Info("Finished ManagedResource health checks")

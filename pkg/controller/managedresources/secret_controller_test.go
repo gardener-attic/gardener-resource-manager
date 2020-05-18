@@ -358,9 +358,7 @@ var _ = Describe("SecretReconciler", func() {
 			}))
 		})
 
-		It("should fail if secret update fails", func() {
-			fakeErr := fmt.Errorf("fake")
-
+		It("should requeue if secret update fails", func() {
 			secret.Finalizers = []string{filter.FinalizerName()}
 
 			mrs := []resourcesv1alpha1.ManagedResource{{
@@ -384,11 +382,11 @@ var _ = Describe("SecretReconciler", func() {
 				})
 			c.EXPECT().Update(nil, gomock.AssignableToTypeOf(secret)).
 				DoAndReturn(func(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
-					return fakeErr
+					return fmt.Errorf("fake")
 				})
 
 			res, err := r.Reconcile(secretReq)
-			Expect(err).To(MatchError(ContainSubstring("fake")))
+			Expect(err).To(BeNil())
 			Expect(res).To(Equal(reconcile.Result{
 				RequeueAfter: 5 * time.Second,
 			}))
