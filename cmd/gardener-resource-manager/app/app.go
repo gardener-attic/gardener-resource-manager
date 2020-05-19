@@ -27,6 +27,7 @@ import (
 	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources"
 	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources/health"
 	logpkg "github.com/gardener/gardener-resource-manager/pkg/log"
+	"github.com/gardener/gardener-resource-manager/pkg/mapper"
 	managerpredicate "github.com/gardener/gardener-resource-manager/pkg/predicate"
 
 	hvpav1alpha1 "github.com/gardener/hvpa-controller/api/v1alpha1"
@@ -72,6 +73,7 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 		targetCacheResyncPeriod    time.Duration
 		syncPeriod                 time.Duration
 		maxConcurrentWorkers       int
+		secretMaxConcurrentWorkers int
 		healthSyncPeriod           time.Duration
 		healthMaxConcurrentWorkers int
 		targetKubeconfigPath       string
@@ -185,13 +187,44 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 			}
 			if err := c.Watch(
 				&source.Kind{Type: &corev1.Secret{}},
-				&handler.EnqueueRequestsFromMapFunc{ToRequests: managedresources.SecretToManagedResourceMapper(mgr.GetClient(), filter)},
+				&handler.EnqueueRequestsFromMapFunc{ToRequests: mapper.SecretToManagedResourceMapper(filter)},
 			); err != nil {
 				return fmt.Errorf("unable to watch Secrets mapping to ManagedResources: %+v", err)
 			}
 
 			entryLog.Info("Managed resource controller", "syncPeriod", syncPeriod.String())
 			entryLog.Info("Managed resource controller", "maxConcurrentWorkers", maxConcurrentWorkers)
+
+			secretController, err := controller.New("secret-controller", mgr, controller.Options{
+				MaxConcurrentReconciles: secretMaxConcurrentWorkers,
+				Reconciler: managedresources.NewSecretReconciler(
+					log.WithName("secret-reconciler"),
+					filter,
+				),
+			})
+			if err != nil {
+				return fmt.Errorf("unable to set up secret controller: %+v", err)
+			}
+
+			if err := secretController.Watch(
+				&source.Kind{Type: &resourcesv1alpha1.ManagedResource{}},
+				&handler.EnqueueRequestsFromMapFunc{ToRequests: mapper.ManagedResourceToSecretsMapper()},
+				predicate.GenerationChangedPredicate{},
+			); err != nil {
+				return fmt.Errorf("unable to watch ManagedResources: %+v", err)
+			}
+
+			// Also watch secrets to ensure, that we properly remove the finalizer in case we missed an important
+			// update event for a ManagedResource during downtime.
+			if err := secretController.Watch(
+				&source.Kind{Type: &corev1.Secret{}},
+				&handler.EnqueueRequestForObject{},
+				// Only requeue secrets from create/update events with the controller's finalizer to not flood the controller
+				// with too many unnecessary requests for all secrets in cluster/namespace.
+				managerpredicate.HasFinalizer(filter.FinalizerName()),
+			); err != nil {
+				return fmt.Errorf("unable to watch Secrets: %+v", err)
+			}
 
 			healthController, err := controller.New("health-controller", mgr, controller.Options{
 				MaxConcurrentReconciles: healthMaxConcurrentWorkers,
@@ -281,6 +314,7 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 	cmd.Flags().DurationVar(&syncPeriod, "sync-period", time.Minute, "duration how often existing resources should be synced")
 	cmd.Flags().DurationVar(&targetCacheResyncPeriod, "target-cache-resync-period", 24*time.Hour, "duration how often the controller's cache for the target cluster is resynced")
 	cmd.Flags().IntVar(&maxConcurrentWorkers, "max-concurrent-workers", 10, "number of worker threads for concurrent reconciliation of resources")
+	cmd.Flags().IntVar(&secretMaxConcurrentWorkers, "secret-max-concurrent-workers", 5, "number of worker threads for concurrent secret reconciliation of resources")
 	cmd.Flags().DurationVar(&healthSyncPeriod, "health-sync-period", time.Minute, "duration how often the health of existing resources should be synced")
 	cmd.Flags().IntVar(&healthMaxConcurrentWorkers, "health-max-concurrent-workers", 10, "number of worker threads for concurrent health reconciliation of resources")
 	cmd.Flags().StringVar(&kubeconfigPath, "kubeconfig", "", "path to the kubeconfig for the source cluster")

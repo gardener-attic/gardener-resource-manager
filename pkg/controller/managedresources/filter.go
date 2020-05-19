@@ -95,7 +95,7 @@ func (f *ClassFilter) Active(o runtime.Object) (action bool, responsible bool) {
 			}
 		}
 	}
-	action = (!busy && responsible)
+	action = !busy && responsible
 	return
 }
 
