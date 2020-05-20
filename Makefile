@@ -15,7 +15,6 @@
 REGISTRY                    := eu.gcr.io/gardener-project
 IMAGE_PREFIX                := $(REGISTRY)/gardener
 REPO_ROOT                   := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
-HACK_DIR                    := $(REPO_ROOT)/hack
 VERSION                     := $(shell cat VERSION)
 LD_FLAGS                    := "-w -X github.com/gardener/gardener-resource-manager/pkg/version.Version=$(VERSION)"
 VERIFY                      := true
@@ -72,6 +71,7 @@ docker-image:
 revendor:
 	@GO111MODULE=on go mod vendor
 	@GO111MODULE=on go mod tidy
+	@$(REPO_ROOT)/hack/update-github-templates.sh
 
 .PHONY: start
 start:
