@@ -88,8 +88,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			log.Info("Stopping reconciliation of ManagedResource, as it has been deleted")
 			return reconcile.Result{}, nil
 		}
-		log.Error(err, "Could not fetch ManagedResource")
-		return reconcile.Result{}, err
+		return reconcile.Result{}, fmt.Errorf("could not fetch ManagedResource: %+v", err)
 	}
 
 	action, responsible := r.class.Active(mr)
@@ -143,15 +142,12 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 	for _, ref := range mr.Spec.SecretRefs {
 		secret := &corev1.Secret{}
 		if err := r.client.Get(r.ctx, client.ObjectKey{Namespace: mr.Namespace, Name: ref.Name}, secret); err != nil {
-			log.Error(err, "Could not read secret", "name", secret.Name)
-
 			conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, "CannotReadSecret", err.Error())
 			if err := tryUpdateManagedResourceConditions(r.ctx, r.client, mr, conditionResourcesApplied); err != nil {
-				log.Error(err, "Could not update the ManagedResource status")
-				return ctrl.Result{}, err
+				return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v ", err)
 			}
 
-			return reconcile.Result{}, err
+			return reconcile.Result{}, fmt.Errorf("could not read secret '%s': %+v", secret.Name, err)
 		}
 
 		for key, value := range secret.Data {
@@ -255,8 +251,7 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionProgressing, reason, msg)
 
 		if err := tryUpdateManagedResourceConditions(r.ctx, r.client, mr, conditionResourcesHealthy, conditionResourcesApplied); err != nil {
-			log.Error(err, "Could not update the ManagedResource status")
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v", err)
 		}
 	}
 
@@ -268,7 +263,7 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 		if deletionPending {
 			reason = resourcesv1alpha1.ConditionDeletionPending
 			status = resourcesv1alpha1.ConditionProgressing
-			log.Error(err, "Deletion is still pending")
+			log.Info("Deletion is still pending", "err", err)
 		} else {
 			reason = resourcesv1alpha1.ConditionDeletionFailed
 			status = resourcesv1alpha1.ConditionFalse
@@ -277,23 +272,23 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 
 		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, status, reason, err.Error())
 		if err := tryUpdateManagedResourceConditions(r.ctx, r.client, mr, conditionResourcesApplied); err != nil {
-			log.Error(err, "Could not update the ManagedResource status")
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v", err)
 		}
 
-		return ctrl.Result{}, err
+		if deletionPending {
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		} else {
+			return ctrl.Result{}, err
+		}
 	}
 
 	if err := r.applyNewResources(newResourcesObjects, mr.Spec.InjectLabels, equivalences); err != nil {
-		log.Error(err, "Could not apply all new resources")
-
 		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, resourcesv1alpha1.ConditionApplyFailed, err.Error())
 		if err := tryUpdateManagedResourceConditions(r.ctx, r.client, mr, conditionResourcesApplied); err != nil {
-			log.Error(err, "Could not update the ManagedResource status")
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v", err)
 		}
 
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("could not apply all new resources: %+v", err)
 	}
 
 	if len(decodingErrors) != 0 {
@@ -303,8 +298,7 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 	}
 
 	if err := tryUpdateManagedResourceStatus(r.ctx, r.client, mr, newResourcesObjectReferences, conditionResourcesApplied); err != nil {
-		log.Error(err, "Could not update the ManagedResource status")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v", err)
 	}
 
 	log.Info("Finished to reconcile ManagedResource")
@@ -327,8 +321,7 @@ func (r *Reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logg
 		}
 		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionProgressing, resourcesv1alpha1.ConditionDeletionPending, msg)
 		if err := tryUpdateManagedResourceConditions(r.ctx, r.client, mr, conditionResourcesApplied); err != nil {
-			log.Error(err, "Could not update the ManagedResource status")
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v", err)
 		}
 
 		if deletionPending, err := r.cleanOldResources(existingResourcesIndex, mr); err != nil {
@@ -348,8 +341,7 @@ func (r *Reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logg
 
 			conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, status, reason, err.Error())
 			if err := tryUpdateManagedResourceConditions(r.ctx, r.client, mr, conditionResourcesApplied); err != nil {
-				log.Error(err, "Could not update the ManagedResource status")
-				return ctrl.Result{}, err
+				return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v", err)
 			}
 
 			if deletionPending {
@@ -365,8 +357,7 @@ func (r *Reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logg
 	log.Info("All resources have been deleted, removing finalizers from ManagedResource")
 
 	if err := utils.DeleteFinalizer(r.ctx, r.client, r.class.FinalizerName(), mr); err != nil {
-		log.Error(err, "Error removing finalizer from ManagedResource")
-		return reconcile.Result{}, err
+		return reconcile.Result{}, fmt.Errorf("error removing finalizer from ManagedResource: %+v", err)
 	}
 
 	log.Info("Finished to delete ManagedResource")

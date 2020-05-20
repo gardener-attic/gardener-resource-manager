@@ -16,6 +16,7 @@ package managedresources
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
@@ -68,14 +69,12 @@ func (r *SecretReconciler) Reconcile(req reconcile.Request) (reconcile.Result, e
 			log.Info("Stopping reconciliation of Secret, as it has been deleted")
 			return reconcile.Result{}, nil
 		}
-		log.Error(err, "Could not fetch Secret")
-		return reconcile.Result{}, err
+		return reconcile.Result{}, fmt.Errorf("could not fetch Secret: %+v", err)
 	}
 
 	resourceList := &resourcesv1alpha1.ManagedResourceList{}
 	if err := r.client.List(r.ctx, resourceList, client.InNamespace(secret.Namespace)); err != nil {
-		log.Error(err, "Could not fetch ManagedResources in namespace of ManagedResource")
-		return reconcile.Result{}, err
+		return reconcile.Result{}, fmt.Errorf("could not fetch ManagedResources in namespace of Secret: %+v", err)
 	}
 
 	// check if there is at least one ManagedResource this controller is responsible for and which references this secret
@@ -114,9 +113,9 @@ func (r *SecretReconciler) Reconcile(req reconcile.Request) (reconcile.Result, e
 			secret.Finalizers = secretFinalizers.UnsortedList()
 			return nil
 		}); client.IgnoreNotFound(err) != nil {
-			r.log.Error(err, "failed to update finalizers of secret")
+			r.log.Error(err, "failed to update finalizers of Secret")
 			// dont' run into exponential backoff for adding/removing finalizers
-			return reconcile.Result{RequeueAfter: 5 * time.Second}, err
+			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 	}
 
