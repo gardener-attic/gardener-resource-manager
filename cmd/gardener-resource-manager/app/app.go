@@ -31,6 +31,8 @@ import (
 	managerpredicate "github.com/gardener/gardener-resource-manager/pkg/predicate"
 
 	hvpav1alpha1 "github.com/gardener/hvpa-controller/api/v1alpha1"
+	extensionspredicate "github.com/gardener/gardener/extensions/pkg/predicate"
+	extensionscontroller "github.com/gardener/gardener/extensions/pkg/controller"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	corev1 "k8s.io/api/core/v1"
@@ -163,7 +165,9 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 
 			c, err := controller.New("resource-controller", mgr, controller.Options{
 				MaxConcurrentReconciles: maxConcurrentWorkers,
-				Reconciler: managedresources.NewReconciler(
+				Reconciler: extensionscontroller.OperationAnnotationWrapper(
+					&resourcesv1alpha1.ManagedResource{},
+					managedresources.NewReconciler(
 					ctx,
 					log.WithName("reconciler"),
 					mgr.GetClient(),
@@ -172,6 +176,7 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 					targetScheme,
 					filter,
 					syncPeriod,
+					),
 				),
 			})
 			if err != nil {
@@ -181,7 +186,7 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 			if err := c.Watch(
 				&source.Kind{Type: &resourcesv1alpha1.ManagedResource{}},
 				&handler.EnqueueRequestForObject{},
-				filter, predicate.GenerationChangedPredicate{},
+				filter, extensionspredicate.Or(predicate.GenerationChangedPredicate{}, extensionspredicate.HasOperationAnnotation()),
 			); err != nil {
 				return fmt.Errorf("unable to watch ManagedResources: %+v", err)
 			}
