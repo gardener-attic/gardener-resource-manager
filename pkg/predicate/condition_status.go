@@ -22,8 +22,31 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
+// ConditionChangeFn is a type for comparing two conditions.
+type ConditionChangeFn func(con1, con2 *resourcesv1alpha1.ManagedResourceCondition) bool
+
+// DefaultConditionChange compares the given conditions and returns `true` if the `Status` has changed.
+var DefaultConditionChange ConditionChangeFn = func(con1, con2 *resourcesv1alpha1.ManagedResourceCondition) bool {
+	if con1 == nil {
+		// trigger if condition was added
+		return con2 != nil
+	}
+
+	if con2 == nil {
+		return true // condition was removed
+	}
+
+	return con1.Status != con2.Status
+}
+
+// ConditionChangedToUnhealthy compares the given conditions and returns `true` if the `Status` has changed to an unhealthy state.
+var ConditionChangedToUnhealthy ConditionChangeFn = func(con1, con2 *resourcesv1alpha1.ManagedResourceCondition) bool {
+	return (con1 == nil || con1.Status == resourcesv1alpha1.ConditionTrue) &&
+		(con2 != nil && con2.Status == resourcesv1alpha1.ConditionFalse)
+}
+
 // ConditionStatusChanged is a predicate that detects changes to the status of a Condition with a given type.
-func ConditionStatusChanged(conditionType resourcesv1alpha1.ConditionType) predicate.Predicate {
+func ConditionStatusChanged(conditionType resourcesv1alpha1.ConditionType, changeFn ConditionChangeFn) predicate.Predicate {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			if e.ObjectOld == nil {
@@ -49,16 +72,7 @@ func ConditionStatusChanged(conditionType resourcesv1alpha1.ConditionType) predi
 			oldCondition := resourcesv1alpha1helper.GetCondition(old.Status.Conditions, conditionType)
 			newCondition := resourcesv1alpha1helper.GetCondition(new.Status.Conditions, conditionType)
 
-			if oldCondition == nil {
-				// trigger if condition was added
-				return newCondition != nil
-			}
-
-			if newCondition == nil {
-				return true // condition was removed
-			}
-
-			return oldCondition.Status != newCondition.Status
+			return changeFn(oldCondition, newCondition)
 		},
 	}
 }

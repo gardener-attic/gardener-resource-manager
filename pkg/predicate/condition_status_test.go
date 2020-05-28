@@ -16,10 +16,11 @@ package predicate_test
 
 import (
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
-	resourcesv1alpha1helper "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1/helper"
-	managerpredicate "github.com/gardener/gardener-resource-manager/pkg/predicate"
+	. "github.com/gardener/gardener-resource-manager/pkg/predicate"
+	"github.com/onsi/gomega/types"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/pointer"
@@ -60,7 +61,7 @@ var _ = Describe("#ConditionStatusChanged", func() {
 	})
 
 	It("should not match on update (no change)", func() {
-		predicate := managerpredicate.ConditionStatusChanged(conditionType)
+		predicate := ConditionStatusChanged(conditionType, DefaultConditionChange)
 
 		Expect(predicate.Create(createEvent)).To(BeTrue())
 		Expect(predicate.Update(updateEvent)).To(BeFalse())
@@ -71,7 +72,7 @@ var _ = Describe("#ConditionStatusChanged", func() {
 	It("should not match on update (old not set)", func() {
 		updateEvent.ObjectOld = nil
 
-		predicate := managerpredicate.ConditionStatusChanged(conditionType)
+		predicate := ConditionStatusChanged(conditionType, DefaultConditionChange)
 
 		Expect(predicate.Create(createEvent)).To(BeTrue())
 		Expect(predicate.Update(updateEvent)).To(BeFalse())
@@ -82,7 +83,7 @@ var _ = Describe("#ConditionStatusChanged", func() {
 	It("should not match on update (old is not a ManagedResource)", func() {
 		updateEvent.ObjectOld = &corev1.Pod{}
 
-		predicate := managerpredicate.ConditionStatusChanged(conditionType)
+		predicate := ConditionStatusChanged(conditionType, DefaultConditionChange)
 
 		Expect(predicate.Create(createEvent)).To(BeTrue())
 		Expect(predicate.Update(updateEvent)).To(BeFalse())
@@ -93,7 +94,7 @@ var _ = Describe("#ConditionStatusChanged", func() {
 	It("should not match on update (new not set)", func() {
 		updateEvent.ObjectNew = nil
 
-		predicate := managerpredicate.ConditionStatusChanged(conditionType)
+		predicate := ConditionStatusChanged(conditionType, DefaultConditionChange)
 
 		Expect(predicate.Create(createEvent)).To(BeTrue())
 		Expect(predicate.Update(updateEvent)).To(BeFalse())
@@ -104,7 +105,7 @@ var _ = Describe("#ConditionStatusChanged", func() {
 	It("should not match on update (new is not a ManagedResource)", func() {
 		updateEvent.ObjectNew = &corev1.Pod{}
 
-		predicate := managerpredicate.ConditionStatusChanged(conditionType)
+		predicate := ConditionStatusChanged(conditionType, DefaultConditionChange)
 
 		Expect(predicate.Create(createEvent)).To(BeTrue())
 		Expect(predicate.Update(updateEvent)).To(BeFalse())
@@ -112,51 +113,91 @@ var _ = Describe("#ConditionStatusChanged", func() {
 		Expect(predicate.Generic(genericEvent)).To(BeTrue())
 	})
 
-	It("should match on update (condition added)", func() {
-		condition := resourcesv1alpha1helper.InitCondition(conditionType)
-		managedResourceNew := managedResource.DeepCopy()
-		condition.Status = resourcesv1alpha1.ConditionTrue
-		managedResourceNew.Status.Conditions = []resourcesv1alpha1.ManagedResourceCondition{condition}
-		updateEvent.ObjectNew = managedResourceNew
+	DescribeTable("DefaultConditionChange",
+		func(old, new *resourcesv1alpha1.ManagedResourceCondition, matcher types.GomegaMatcher) {
+			managedResourceNew := managedResource.DeepCopy()
+			if old != nil {
+				managedResource.Status.Conditions = []resourcesv1alpha1.ManagedResourceCondition{*old}
+			}
+			if new != nil {
+				managedResourceNew.Status.Conditions = []resourcesv1alpha1.ManagedResourceCondition{*new}
+			}
+			updateEvent.ObjectOld = managedResource
+			updateEvent.ObjectNew = managedResourceNew
 
-		predicate := managerpredicate.ConditionStatusChanged(conditionType)
+			predicate := ConditionStatusChanged(conditionType, DefaultConditionChange)
 
-		Expect(predicate.Create(createEvent)).To(BeTrue())
-		Expect(predicate.Update(updateEvent)).To(BeTrue())
-		Expect(predicate.Delete(deleteEvent)).To(BeTrue())
-		Expect(predicate.Generic(genericEvent)).To(BeTrue())
-	})
+			Expect(predicate.Create(createEvent)).To(BeTrue())
+			Expect(predicate.Update(updateEvent)).To(matcher)
+			Expect(predicate.Delete(deleteEvent)).To(BeTrue())
+			Expect(predicate.Generic(genericEvent)).To(BeTrue())
+		},
+		Entry("should match on update (condition added)",
+			nil,
+			condition(resourcesv1alpha1.ConditionTrue),
+			BeTrue(),
+		),
+		Entry("should match on update (condition removed)",
+			condition(resourcesv1alpha1.ConditionTrue),
+			nil,
+			BeTrue(),
+		),
+		Entry("should match on update (condition status changed)",
+			condition(resourcesv1alpha1.ConditionProgressing),
+			condition(resourcesv1alpha1.ConditionTrue),
+			BeTrue(),
+		),
+	)
 
-	It("should match on update (condition removed)", func() {
-		condition := resourcesv1alpha1helper.InitCondition(conditionType)
-		condition.Status = resourcesv1alpha1.ConditionTrue
-		managedResourceNew := managedResource.DeepCopy()
-		managedResource.Status.Conditions = []resourcesv1alpha1.ManagedResourceCondition{condition}
-		updateEvent.ObjectNew = managedResourceNew
+	DescribeTable("ConditionChangedToUnhealthy",
+		func(old, new *resourcesv1alpha1.ManagedResourceCondition, matcher types.GomegaMatcher) {
+			managedResourceNew := managedResource.DeepCopy()
+			if old != nil {
+				managedResource.Status.Conditions = []resourcesv1alpha1.ManagedResourceCondition{*old}
+			}
+			if new != nil {
+				managedResourceNew.Status.Conditions = []resourcesv1alpha1.ManagedResourceCondition{*new}
+			}
+			updateEvent.ObjectNew = managedResourceNew
 
-		predicate := managerpredicate.ConditionStatusChanged(conditionType)
+			predicate := ConditionStatusChanged(conditionType, ConditionChangedToUnhealthy)
 
-		Expect(predicate.Create(createEvent)).To(BeTrue())
-		Expect(predicate.Update(updateEvent)).To(BeTrue())
-		Expect(predicate.Delete(deleteEvent)).To(BeTrue())
-		Expect(predicate.Generic(genericEvent)).To(BeTrue())
-	})
-
-	It("should match on update (condition status changed)", func() {
-		condition := resourcesv1alpha1helper.InitCondition(conditionType)
-		condition.Status = resourcesv1alpha1.ConditionProgressing
-		managedResource.Status.Conditions = []resourcesv1alpha1.ManagedResourceCondition{condition}
-
-		managedResourceNew := managedResource.DeepCopy()
-		condition.Status = resourcesv1alpha1.ConditionTrue
-		managedResourceNew.Status.Conditions = []resourcesv1alpha1.ManagedResourceCondition{condition}
-		updateEvent.ObjectNew = managedResourceNew
-
-		predicate := managerpredicate.ConditionStatusChanged(conditionType)
-
-		Expect(predicate.Create(createEvent)).To(BeTrue())
-		Expect(predicate.Update(updateEvent)).To(BeTrue())
-		Expect(predicate.Delete(deleteEvent)).To(BeTrue())
-		Expect(predicate.Generic(genericEvent)).To(BeTrue())
-	})
+			Expect(predicate.Create(createEvent)).To(BeTrue())
+			Expect(predicate.Update(updateEvent)).To(matcher)
+			Expect(predicate.Delete(deleteEvent)).To(BeTrue())
+			Expect(predicate.Generic(genericEvent)).To(BeTrue())
+		},
+		Entry("should not match on update (condition added)",
+			nil,
+			condition(resourcesv1alpha1.ConditionTrue),
+			BeFalse(),
+		),
+		Entry("should not match on update (status changed to true)",
+			condition(resourcesv1alpha1.ConditionFalse),
+			condition(resourcesv1alpha1.ConditionTrue),
+			BeFalse(),
+		),
+		Entry("should not match on update (no status change)",
+			condition(resourcesv1alpha1.ConditionTrue),
+			condition(resourcesv1alpha1.ConditionTrue),
+			BeFalse(),
+		),
+		Entry("should match on update (condition added)",
+			nil,
+			condition(resourcesv1alpha1.ConditionFalse),
+			BeTrue(),
+		),
+		Entry("should match on update (status changed to false)",
+			condition(resourcesv1alpha1.ConditionTrue),
+			condition(resourcesv1alpha1.ConditionFalse),
+			BeTrue(),
+		),
+	)
 })
+
+func condition(status resourcesv1alpha1.ConditionStatus) *resourcesv1alpha1.ManagedResourceCondition {
+	return &resourcesv1alpha1.ManagedResourceCondition{
+		Type:   resourcesv1alpha1.ResourcesApplied,
+		Status: status,
+	}
+}

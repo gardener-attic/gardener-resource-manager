@@ -30,9 +30,9 @@ import (
 	"github.com/gardener/gardener-resource-manager/pkg/mapper"
 	managerpredicate "github.com/gardener/gardener-resource-manager/pkg/predicate"
 
-	hvpav1alpha1 "github.com/gardener/hvpa-controller/api/v1alpha1"
-	extensionspredicate "github.com/gardener/gardener/extensions/pkg/predicate"
 	extensionscontroller "github.com/gardener/gardener/extensions/pkg/controller"
+	extensionspredicate "github.com/gardener/gardener/extensions/pkg/predicate"
+	hvpav1alpha1 "github.com/gardener/hvpa-controller/api/v1alpha1"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	corev1 "k8s.io/api/core/v1"
@@ -168,14 +168,14 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 				Reconciler: extensionscontroller.OperationAnnotationWrapper(
 					&resourcesv1alpha1.ManagedResource{},
 					managedresources.NewReconciler(
-					ctx,
-					log.WithName("reconciler"),
-					mgr.GetClient(),
-					targetClient,
-					targetRESTMapper,
-					targetScheme,
-					filter,
-					syncPeriod,
+						ctx,
+						log.WithName("reconciler"),
+						mgr.GetClient(),
+						targetClient,
+						targetRESTMapper,
+						targetScheme,
+						filter,
+						syncPeriod,
 					),
 				),
 			})
@@ -186,7 +186,11 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 			if err := c.Watch(
 				&source.Kind{Type: &resourcesv1alpha1.ManagedResource{}},
 				&handler.EnqueueRequestForObject{},
-				filter, extensionspredicate.Or(predicate.GenerationChangedPredicate{}, extensionspredicate.HasOperationAnnotation()),
+				filter, extensionspredicate.Or(
+					predicate.GenerationChangedPredicate{},
+					extensionspredicate.HasOperationAnnotation(),
+					managerpredicate.ConditionStatusChanged(resourcesv1alpha1.ResourcesHealthy, managerpredicate.ConditionChangedToUnhealthy),
+				),
 			); err != nil {
 				return fmt.Errorf("unable to watch ManagedResources: %+v", err)
 			}
@@ -263,10 +267,10 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 						}})
 					},
 				},
-				filter, managerpredicate.Or(
+				filter, extensionspredicate.Or(
 					managerpredicate.ClassChangedPredicate(),
 					// start health checks immediately after MR has been reconciled
-					managerpredicate.ConditionStatusChanged(resourcesv1alpha1.ResourcesApplied),
+					managerpredicate.ConditionStatusChanged(resourcesv1alpha1.ResourcesApplied, managerpredicate.DefaultConditionChange),
 				),
 			); err != nil {
 				return fmt.Errorf("unable to watch ManagedResources: %+v", err)
