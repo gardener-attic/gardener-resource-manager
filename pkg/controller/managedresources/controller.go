@@ -31,9 +31,11 @@ import (
 	hvpav1alpha1 "github.com/gardener/hvpa-controller/api/v1alpha1"
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-multierror"
+	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
+	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -58,6 +60,7 @@ const (
 
 var (
 	deletePropagationForeground = metav1.DeletePropagationForeground
+	foregroundDeletionAPIGroups = sets.NewString(appsv1.GroupName, extensionsv1beta1.GroupName, batchv1.GroupName)
 )
 
 // Reconciler contains information in order to reconcile instances of ManagedResource.
@@ -607,14 +610,16 @@ func (r *Reconciler) cleanOldResources(index *ObjectIndex, mr *resourcesv1alpha1
 					return
 				}
 
-				// delete with DeletePropagationForeground to be sure to cleanup all resources (e.g. batch/v1beta1.CronJob
-				// defaults PropagationPolicy to Orphan for backwards compatibility, so it will orphan its Jobs)
-				deleteOptions := &client.DeleteOptions{PropagationPolicy: &deletePropagationForeground}
+				deleteOptions := &client.DeleteOptions{}
 
-				// workaround for https://github.com/kubernetes/kubernetes/issues/91621 because of which RBAC objects
-				// cannot be deleted with foreground deletion propagation
-				if obj.GroupVersionKind().Group == rbacv1.GroupName {
-					deleteOptions.PropagationPolicy = nil
+				// only delete resources in specific API groups with foreground deletion propagation
+				// see https://github.com/kubernetes/kubernetes/issues/91621, https://github.com/kubernetes/kubernetes/issues/91287
+				// and similar, because of which some objects (e.g `rbac/*` or `v1/Service`) cannot be deleted reliably
+				// with foreground deletion propagation.
+				if foregroundDeletionAPIGroups.Has(obj.GroupVersionKind().Group) {
+					// delete with DeletePropagationForeground to be sure to cleanup all resources (e.g. batch/v1beta1.CronJob
+					// defaults PropagationPolicy to Orphan for backwards compatibility, so it will orphan its Jobs)
+					deleteOptions.PropagationPolicy = &deletePropagationForeground
 				}
 
 				if err := r.targetClient.Delete(r.ctx, obj, deleteOptions); err != nil {
