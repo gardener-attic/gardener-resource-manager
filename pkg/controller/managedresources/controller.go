@@ -33,6 +33,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -608,7 +609,15 @@ func (r *Reconciler) cleanOldResources(index *ObjectIndex, mr *resourcesv1alpha1
 
 				// delete with DeletePropagationForeground to be sure to cleanup all resources (e.g. batch/v1beta1.CronJob
 				// defaults PropagationPolicy to Orphan for backwards compatibility, so it will orphan its Jobs)
-				if err := r.targetClient.Delete(r.ctx, obj, &client.DeleteOptions{PropagationPolicy: &deletePropagationForeground}); err != nil {
+				deleteOptions := &client.DeleteOptions{PropagationPolicy: &deletePropagationForeground}
+
+				// workaround for https://github.com/kubernetes/kubernetes/issues/91621 because of which RBAC objects
+				// cannot be deleted with foreground deletion propagation
+				if obj.GroupVersionKind().Group == rbacv1.GroupName {
+					deleteOptions.PropagationPolicy = nil
+				}
+
+				if err := r.targetClient.Delete(r.ctx, obj, deleteOptions); err != nil {
 					if !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
 						r.log.Error(err, "Error during deletion", "resource", resource)
 						results <- &output{resource, true, err}
