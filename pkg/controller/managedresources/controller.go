@@ -393,16 +393,11 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 			defer wg.Done()
 
 			var (
+				current            = obj.obj.DeepCopy()
 				resource           = unstructuredToString(obj.obj)
 				scaledHorizontally = isScaled(obj.obj, horizontallyScaledObjects, equivalences)
 				scaledVertically   = isScaled(obj.obj, verticallyScaledObjects, equivalences)
 			)
-
-			current := &unstructured.Unstructured{}
-			current.SetAPIVersion(obj.obj.GetAPIVersion())
-			current.SetKind(obj.obj.GetKind())
-			current.SetNamespace(obj.obj.GetNamespace())
-			current.SetName(obj.obj.GetName())
 
 			r.log.Info("Applying", "resource", resource)
 
