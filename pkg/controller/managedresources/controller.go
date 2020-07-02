@@ -49,12 +49,13 @@ import (
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const (
 	// FinalizerName is the finalizer base name that is injected into ManagedResources.
-	// The concrete finalizer is finally componed by this base name and the resource class.
+	// The concrete finalizer is finally containing this base name and the resource class.
 	FinalizerName = "resources.gardener.cloud/gardener-resource-manager"
 )
 
@@ -403,17 +404,17 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 			r.log.Info("Applying", "resource", resource)
 
 			results <- retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-				if err := utils.TypedCreateOrUpdate(r.ctx, r.targetClient, r.targetScheme, current, r.alwaysUpdate, func() error {
+				if operationResult, err := utils.TypedCreateOrUpdate(r.ctx, r.targetClient, r.targetScheme, current, r.alwaysUpdate, func() error {
 					metadata, err := meta.Accessor(obj.obj)
 					if err != nil {
 						return fmt.Errorf("error getting metadata of object %q: %s", resource, err)
 					}
+
 					// if the ignore annotation is set to false, do nothing (ignore the resource)
 					if ignore(metadata) {
-						anns := current.GetAnnotations()
-						delete(anns, descriptionAnnotation)
-
-						current.SetAnnotations(anns)
+						annotations := current.GetAnnotations()
+						delete(annotations, descriptionAnnotation)
+						current.SetAnnotations(annotations)
 						return nil
 					}
 
@@ -426,10 +427,19 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 					if meta.IsNoMatchError(err) {
 						encounteredNoMatchError = true
 					}
+
 					if apierrors.IsConflict(err) {
 						r.log.Info(fmt.Sprintf("conflict during apply of object %q: %s", resource, err))
 						// return conflict error directly, so that the update will be retried
 						return err
+					}
+
+					if apierrors.IsInvalid(err) && operationResult == controllerutil.OperationResultUpdated && deleteOnInvalidUpdate(current) {
+						if deleteErr := r.targetClient.Delete(r.ctx, current); client.IgnoreNotFound(deleteErr) != nil {
+							return fmt.Errorf("error deleting object %q after 'invalid' update error: %s", resource, deleteErr)
+						}
+						// return error directly, so that the create after delete will be retried
+						return fmt.Errorf("deleted object %q because of 'invalid' update error and 'delete-on-invalid-update' annotation on object (%s)", resource, err)
 					}
 
 					return fmt.Errorf("error during apply of object %q: %s", resource, err)
@@ -549,10 +559,21 @@ func objectKeyFromUnstructured(o *unstructured.Unstructured) string {
 }
 
 func ignore(meta metav1.Object) bool {
-	val, annotationExists := meta.GetAnnotations()[resourcesv1alpha1.ResourceManagerIgnoreAnnotation]
-	ignoreSet, _ := strconv.ParseBool(val)
+	return annotationExistsAndValueTrue(meta, resourcesv1alpha1.Ignore)
+}
 
-	return annotationExists && ignoreSet
+func deleteOnInvalidUpdate(meta metav1.Object) bool {
+	return annotationExistsAndValueTrue(meta, resourcesv1alpha1.DeleteOnInvalidUpdate)
+}
+
+func annotationExistsAndValueTrue(meta metav1.Object, key string) bool {
+	annotations := meta.GetAnnotations()
+	if annotations == nil {
+		return false
+	}
+	val, annotationExists := annotations[key]
+	valueTrue, _ := strconv.ParseBool(val)
+	return annotationExists && valueTrue
 }
 
 func (r *Reconciler) cleanOldResources(index *ObjectIndex, mr *resourcesv1alpha1.ManagedResource) (bool, error) {

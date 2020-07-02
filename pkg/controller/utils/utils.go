@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -144,10 +145,10 @@ func TryUpdate(ctx context.Context, backoff wait.Backoff, c client.Client, obj r
 // API server, applies the given mutate func and creates or updates it afterwards. In contrast to
 // controllerutil.CreateOrUpdate it tries to create a new typed object of obj's kind (using the provided scheme)
 // to make typed Get requests in order to leverage the client's cache.
-func TypedCreateOrUpdate(ctx context.Context, c client.Client, scheme *runtime.Scheme, obj *unstructured.Unstructured, alwaysUpdate bool, mutate func() error) error {
+func TypedCreateOrUpdate(ctx context.Context, c client.Client, scheme *runtime.Scheme, obj *unstructured.Unstructured, alwaysUpdate bool, mutate func() error) (controllerutil.OperationResult, error) {
 	key, err := client.ObjectKeyFromObject(obj)
 	if err != nil {
-		return err
+		return controllerutil.OperationResultNone, err
 	}
 
 	// client.DelegatingReader does not use its cache for unstructured.Unstructured objects, so we
@@ -162,15 +163,12 @@ func TypedCreateOrUpdate(ctx context.Context, c client.Client, scheme *runtime.S
 
 	if err := c.Get(ctx, key, current); err != nil {
 		if !apierrors.IsNotFound(err) {
-			return err
+			return controllerutil.OperationResultNone, err
 		}
 		if err := mutate(); err != nil {
-			return err
+			return controllerutil.OperationResultNone, err
 		}
-		if err := c.Create(ctx, obj); err != nil {
-			return err
-		}
-		return nil
+		return controllerutil.OperationResultCreated, c.Create(ctx, obj)
 	}
 
 	var existing *unstructured.Unstructured
@@ -179,7 +177,7 @@ func TypedCreateOrUpdate(ctx context.Context, c client.Client, scheme *runtime.S
 	if _, isUnstructured := current.(*unstructured.Unstructured); !isUnstructured {
 		u := &unstructured.Unstructured{}
 		if err := scheme.Convert(current, u, nil); err != nil {
-			return err
+			return controllerutil.OperationResultNone, err
 		}
 		u.DeepCopyInto(obj)
 		existing = u
@@ -188,17 +186,14 @@ func TypedCreateOrUpdate(ctx context.Context, c client.Client, scheme *runtime.S
 	}
 
 	if err := mutate(); err != nil {
-		return err
+		return controllerutil.OperationResultNone, err
 	}
 
 	if !alwaysUpdate && apiequality.Semantic.DeepEqual(existing, obj) {
-		return nil
+		return controllerutil.OperationResultNone, nil
 	}
 
-	if err := c.Update(ctx, obj); err != nil {
-		return err
-	}
-	return nil
+	return controllerutil.OperationResultUpdated, c.Update(ctx, obj)
 }
 
 // TryUpdateStatus tries to apply the given transformation function onto the given object, and to update its

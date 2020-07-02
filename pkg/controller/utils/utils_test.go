@@ -35,10 +35,10 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 var _ = Describe("utils", func() {
-
 	Describe("#TypedCreateOrUpdate", func() {
 		var (
 			ctx  context.Context
@@ -103,11 +103,12 @@ var _ = Describe("utils", func() {
 					c.EXPECT().Create(ctx, obj),
 				)
 
-				err := TypedCreateOrUpdate(ctx, c, s, obj, false, func() error {
+				operationType, err := TypedCreateOrUpdate(ctx, c, s, obj, false, func() error {
 					Expect(obj.Object["spec"]).To(BeNil(), "obj should not be filled, as the object does not exist yet")
 					return nil
 				})
 
+				Expect(operationType).To(Equal(controllerutil.OperationResultCreated))
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -121,12 +122,13 @@ var _ = Describe("utils", func() {
 						return nil
 					})
 
-				err := TypedCreateOrUpdate(ctx, c, s, obj, false, func() error {
+				operationType, err := TypedCreateOrUpdate(ctx, c, s, obj, false, func() error {
 					Expect(obj).To(BeSemanticallyEqualTo(currentDeploymentUnstructured), "obj should be filled with the obj's current spec")
 					return nil
 				})
 
 				Expect(err).NotTo(HaveOccurred())
+				Expect(operationType).To(Equal(controllerutil.OperationResultNone))
 			})
 
 			It("should make a typed get request and don't skip update (no changes but alwaysUpdate=false)", func() {
@@ -142,11 +144,12 @@ var _ = Describe("utils", func() {
 					c.EXPECT().Update(ctx, obj),
 				)
 
-				err := TypedCreateOrUpdate(ctx, c, s, obj, true, func() error {
+				operationType, err := TypedCreateOrUpdate(ctx, c, s, obj, true, func() error {
 					Expect(obj).To(BeSemanticallyEqualTo(currentDeploymentUnstructured), "obj should be filled with the obj's current spec")
 					return nil
 				})
 
+				Expect(operationType).To(Equal(controllerutil.OperationResultUpdated))
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -163,7 +166,7 @@ var _ = Describe("utils", func() {
 					c.EXPECT().Update(ctx, obj),
 				)
 
-				err := TypedCreateOrUpdate(ctx, c, s, obj, false, func() error {
+				operationType, err := TypedCreateOrUpdate(ctx, c, s, obj, false, func() error {
 					Expect(obj).To(BeSemanticallyEqualTo(currentDeploymentUnstructured), "obj should be filled with the obj's current spec")
 
 					// mutate object
@@ -173,6 +176,7 @@ var _ = Describe("utils", func() {
 					return nil
 				})
 
+				Expect(operationType).To(Equal(controllerutil.OperationResultUpdated))
 				Expect(err).NotTo(HaveOccurred())
 			})
 		})
@@ -216,11 +220,12 @@ var _ = Describe("utils", func() {
 					c.EXPECT().Create(ctx, obj),
 				)
 
-				err := TypedCreateOrUpdate(ctx, c, s, obj, false, func() error {
+				operationType, err := TypedCreateOrUpdate(ctx, c, s, obj, false, func() error {
 					Expect(obj.Object["spec"]).To(BeNil(), "obj should not be filled, as the object does not exist yet")
 					return nil
 				})
 
+				Expect(operationType).To(Equal(controllerutil.OperationResultCreated))
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -234,12 +239,13 @@ var _ = Describe("utils", func() {
 						return nil
 					})
 
-				err := TypedCreateOrUpdate(ctx, c, s, obj, false, func() error {
+				operationType, err := TypedCreateOrUpdate(ctx, c, s, obj, false, func() error {
 					Expect(obj).To(BeSemanticallyEqualTo(currentVPAUnstructured), "obj should be filled with the obj's current spec")
 					return nil
 				})
 
 				Expect(err).NotTo(HaveOccurred())
+				Expect(operationType).To(Equal(controllerutil.OperationResultNone))
 			})
 
 			It("should fallback to an unstructured get request but don't skip update (no changes but alwaysUpdate=true)", func() {
@@ -255,11 +261,12 @@ var _ = Describe("utils", func() {
 					c.EXPECT().Update(ctx, obj),
 				)
 
-				err := TypedCreateOrUpdate(ctx, c, s, obj, true, func() error {
+				operationType, err := TypedCreateOrUpdate(ctx, c, s, obj, true, func() error {
 					Expect(obj).To(BeSemanticallyEqualTo(currentVPAUnstructured), "obj should be filled with the obj's current spec")
 					return nil
 				})
 
+				Expect(operationType).To(Equal(controllerutil.OperationResultUpdated))
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -276,7 +283,7 @@ var _ = Describe("utils", func() {
 					c.EXPECT().Update(ctx, obj),
 				)
 
-				err := TypedCreateOrUpdate(ctx, c, s, obj, false, func() error {
+				operationType, err := TypedCreateOrUpdate(ctx, c, s, obj, false, func() error {
 					Expect(obj).To(BeSemanticallyEqualTo(currentVPAUnstructured), "obj should be filled with the obj's current spec")
 
 					// mutate object
@@ -286,6 +293,7 @@ var _ = Describe("utils", func() {
 					return nil
 				})
 
+				Expect(operationType).To(Equal(controllerutil.OperationResultUpdated))
 				Expect(err).NotTo(HaveOccurred())
 			})
 		})
