@@ -73,13 +73,14 @@ type Reconciler struct {
 	targetRESTMapper *restmapper.DeferredDiscoveryRESTMapper
 	targetScheme     *runtime.Scheme
 
-	class      *ClassFilter
-	syncPeriod time.Duration
+	class        *ClassFilter
+	alwaysUpdate bool
+	syncPeriod   time.Duration
 }
 
 // NewReconciler creates a new reconciler with the given target client.
-func NewReconciler(ctx context.Context, log logr.Logger, c, targetClient client.Client, targetRESTMapper *restmapper.DeferredDiscoveryRESTMapper, targetScheme *runtime.Scheme, class *ClassFilter, syncPeriod time.Duration) *Reconciler {
-	return &Reconciler{ctx, log, c, targetClient, targetRESTMapper, targetScheme, class, syncPeriod}
+func NewReconciler(ctx context.Context, log logr.Logger, c, targetClient client.Client, targetRESTMapper *restmapper.DeferredDiscoveryRESTMapper, targetScheme *runtime.Scheme, class *ClassFilter, alwaysUpdate bool, syncPeriod time.Duration) *Reconciler {
+	return &Reconciler{ctx, log, c, targetClient, targetRESTMapper, targetScheme, class, alwaysUpdate, syncPeriod}
 }
 
 // Reconcile implements `reconcile.Reconciler`.
@@ -402,7 +403,7 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 			r.log.Info("Applying", "resource", resource)
 
 			results <- retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-				if err := utils.TypedCreateOrUpdate(r.ctx, r.targetClient, r.targetScheme, current, func() error {
+				if err := utils.TypedCreateOrUpdate(r.ctx, r.targetClient, r.targetScheme, current, r.alwaysUpdate, func() error {
 					metadata, err := meta.Accessor(obj.obj)
 					if err != nil {
 						return fmt.Errorf("error getting metadata of object %q: %s", resource, err)

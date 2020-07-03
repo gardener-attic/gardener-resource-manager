@@ -103,7 +103,7 @@ var _ = Describe("utils", func() {
 					c.EXPECT().Create(ctx, obj),
 				)
 
-				err := TypedCreateOrUpdate(ctx, c, s, obj, func() error {
+				err := TypedCreateOrUpdate(ctx, c, s, obj, false, func() error {
 					Expect(obj.Object["spec"]).To(BeNil(), "obj should not be filled, as the object does not exist yet")
 					return nil
 				})
@@ -121,7 +121,28 @@ var _ = Describe("utils", func() {
 						return nil
 					})
 
-				err := TypedCreateOrUpdate(ctx, c, s, obj, func() error {
+				err := TypedCreateOrUpdate(ctx, c, s, obj, false, func() error {
+					Expect(obj).To(BeSemanticallyEqualTo(currentDeploymentUnstructured), "obj should be filled with the obj's current spec")
+					return nil
+				})
+
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should make a typed get request and don't skip update (no changes but alwaysUpdate=false)", func() {
+				gomock.InOrder(
+					c.EXPECT().Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, gomock.AssignableToTypeOf(&appsv1.Deployment{})).
+						DoAndReturn(func(ctx context.Context, key client.ObjectKey, o runtime.Object) error {
+							deploy, ok := o.(*appsv1.Deployment)
+							Expect(ok).To(BeTrue())
+
+							currentDeployment.DeepCopyInto(deploy)
+							return nil
+						}),
+					c.EXPECT().Update(ctx, obj),
+				)
+
+				err := TypedCreateOrUpdate(ctx, c, s, obj, true, func() error {
 					Expect(obj).To(BeSemanticallyEqualTo(currentDeploymentUnstructured), "obj should be filled with the obj's current spec")
 					return nil
 				})
@@ -142,7 +163,7 @@ var _ = Describe("utils", func() {
 					c.EXPECT().Update(ctx, obj),
 				)
 
-				err := TypedCreateOrUpdate(ctx, c, s, obj, func() error {
+				err := TypedCreateOrUpdate(ctx, c, s, obj, false, func() error {
 					Expect(obj).To(BeSemanticallyEqualTo(currentDeploymentUnstructured), "obj should be filled with the obj's current spec")
 
 					// mutate object
@@ -195,7 +216,7 @@ var _ = Describe("utils", func() {
 					c.EXPECT().Create(ctx, obj),
 				)
 
-				err := TypedCreateOrUpdate(ctx, c, s, obj, func() error {
+				err := TypedCreateOrUpdate(ctx, c, s, obj, false, func() error {
 					Expect(obj.Object["spec"]).To(BeNil(), "obj should not be filled, as the object does not exist yet")
 					return nil
 				})
@@ -213,7 +234,28 @@ var _ = Describe("utils", func() {
 						return nil
 					})
 
-				err := TypedCreateOrUpdate(ctx, c, s, obj, func() error {
+				err := TypedCreateOrUpdate(ctx, c, s, obj, false, func() error {
+					Expect(obj).To(BeSemanticallyEqualTo(currentVPAUnstructured), "obj should be filled with the obj's current spec")
+					return nil
+				})
+
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should fallback to an unstructured get request but don't skip update (no changes but alwaysUpdate=true)", func() {
+				gomock.InOrder(
+					c.EXPECT().Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, gomock.AssignableToTypeOf(&unstructured.Unstructured{})).
+						DoAndReturn(func(ctx context.Context, key client.ObjectKey, o runtime.Object) error {
+							vpa, ok := o.(*unstructured.Unstructured)
+							Expect(ok).To(BeTrue())
+
+							currentVPAUnstructured.DeepCopyInto(vpa)
+							return nil
+						}),
+					c.EXPECT().Update(ctx, obj),
+				)
+
+				err := TypedCreateOrUpdate(ctx, c, s, obj, true, func() error {
 					Expect(obj).To(BeSemanticallyEqualTo(currentVPAUnstructured), "obj should be filled with the obj's current spec")
 					return nil
 				})
@@ -234,7 +276,7 @@ var _ = Describe("utils", func() {
 					c.EXPECT().Update(ctx, obj),
 				)
 
-				err := TypedCreateOrUpdate(ctx, c, s, obj, func() error {
+				err := TypedCreateOrUpdate(ctx, c, s, obj, false, func() error {
 					Expect(obj).To(BeSemanticallyEqualTo(currentVPAUnstructured), "obj should be filled with the obj's current spec")
 
 					// mutate object

@@ -10,6 +10,7 @@ controllers:
   managedResource:
     syncPeriod: 1m0s
     concurrentSyncs: 10
+    alwaysUpdate: false
   managedResourceHealth:
     syncPeriod: 1m0s
     concurrentSyncs: 10
