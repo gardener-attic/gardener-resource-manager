@@ -21,7 +21,6 @@ import (
 )
 
 var _ = Describe("Controller", func() {
-
 	Describe("#injectLabels", func() {
 		var (
 			obj, expected *unstructured.Unstructured
@@ -110,5 +109,4 @@ var _ = Describe("Controller", func() {
 			Expect(obj).To(Equal(expected))
 		})
 	})
-
 })
