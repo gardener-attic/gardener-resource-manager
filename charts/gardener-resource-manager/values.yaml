@@ -17,6 +17,9 @@ controllers:
 
 leaderElection:
   enabled: true
+  leaseDuration: 15s
+  renewDeadline: 10s
+  retryPeriod: 2s
 
 # targetKubeconfig: |
 #   apiVersion: v1
