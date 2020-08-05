@@ -69,20 +69,27 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 	entryLog := log.WithName("entrypoint")
 
 	var (
-		leaderElection             bool
-		leaderElectionNamespace    string
-		cacheResyncPeriod          time.Duration
-		targetCacheResyncPeriod    time.Duration
-		syncPeriod                 time.Duration
+		leaderElection              bool
+		leaderElectionNamespace     string
+		leaderElectionLeaseDuration time.Duration
+		leaderElectionRenewDeadline time.Duration
+		leaderElectionRetryPeriod   time.Duration
+
+		cacheResyncPeriod       time.Duration
+		targetCacheResyncPeriod time.Duration
+		syncPeriod              time.Duration
+		healthSyncPeriod        time.Duration
+
 		maxConcurrentWorkers       int
 		secretMaxConcurrentWorkers int
-		healthSyncPeriod           time.Duration
 		healthMaxConcurrentWorkers int
-		targetKubeconfigPath       string
-		kubeconfigPath             string
-		namespace                  string
-		resourceClass              string
-		alwaysUpdate               bool
+
+		targetKubeconfigPath string
+		kubeconfigPath       string
+
+		namespace     string
+		resourceClass string
+		alwaysUpdate  bool
 	)
 
 	cmd := &cobra.Command{
@@ -113,6 +120,9 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 				LeaderElection:          leaderElection,
 				LeaderElectionID:        "gardener-resource-manager",
 				LeaderElectionNamespace: leaderElectionNamespace,
+				LeaseDuration:           &leaderElectionLeaseDuration,
+				RenewDeadline:           &leaderElectionRenewDeadline,
+				RetryPeriod:             &leaderElectionRetryPeriod,
 				SyncPeriod:              &cacheResyncPeriod,
 				Namespace:               namespace,
 			})
@@ -321,6 +331,9 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 
 	cmd.Flags().BoolVar(&leaderElection, "leader-election", true, "enable or disable leader election")
 	cmd.Flags().StringVar(&leaderElectionNamespace, "leader-election-namespace", "", "namespace for leader election")
+	cmd.Flags().DurationVar(&leaderElectionLeaseDuration, "leader-election-lease-duration", 15*time.Second, "lease duration for leader election")
+	cmd.Flags().DurationVar(&leaderElectionRenewDeadline, "leader-election-renew-deadline", 10*time.Second, "renew deadline for leader election")
+	cmd.Flags().DurationVar(&leaderElectionRetryPeriod, "leader-election-retry-period", 2*time.Second, "retry period for leader election")
 	cmd.Flags().DurationVar(&cacheResyncPeriod, "cache-resync-period", 24*time.Hour, "duration how often the controller's cache is resynced")
 	cmd.Flags().DurationVar(&syncPeriod, "sync-period", time.Minute, "duration how often existing resources should be synced")
 	cmd.Flags().DurationVar(&targetCacheResyncPeriod, "target-cache-resync-period", 24*time.Hour, "duration how often the controller's cache for the target cluster is resynced")
