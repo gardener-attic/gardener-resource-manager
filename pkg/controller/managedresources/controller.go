@@ -566,6 +566,10 @@ func deleteOnInvalidUpdate(meta metav1.Object) bool {
 	return annotationExistsAndValueTrue(meta, resourcesv1alpha1.DeleteOnInvalidUpdate)
 }
 
+func keepObject(meta metav1.Object) bool {
+	return annotationExistsAndValueTrue(meta, resourcesv1alpha1.KeepObject)
+}
+
 func annotationExistsAndValueTrue(meta metav1.Object, key string) bool {
 	annotations := meta.GetAnnotations()
 	if annotations == nil {
@@ -617,6 +621,12 @@ func (r *Reconciler) cleanOldResources(index *ObjectIndex, mr *resourcesv1alpha1
 					}
 
 					// resource already deleted, nothing to do here
+					results <- &output{resource, false, nil}
+					return
+				}
+
+				if keepObject(obj) {
+					r.log.Info("Keeping object in the system as "+resourcesv1alpha1.KeepObject+" annotation found", "resource", unstructuredToString(obj))
 					results <- &output{resource, false, nil}
 					return
 				}
