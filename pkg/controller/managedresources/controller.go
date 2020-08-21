@@ -135,6 +135,8 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 		decodingErrors []*decodingError
 	)
 
+	origin := mr.Namespace + "/" + mr.Name
+
 	if v := mr.Spec.ForceOverwriteLabels; v != nil {
 		forceOverwriteLabels = *v
 	}
@@ -288,7 +290,7 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 		}
 	}
 
-	if err := r.applyNewResources(newResourcesObjects, mr.Spec.InjectLabels, equivalences); err != nil {
+	if err := r.applyNewResources(origin, newResourcesObjects, mr.Spec.InjectLabels, equivalences); err != nil {
 		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, resourcesv1alpha1.ConditionApplyFailed, err.Error())
 		if err := tryUpdateManagedResourceConditions(r.ctx, r.client, mr, conditionResourcesApplied); err != nil {
 			return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v", err)
@@ -370,7 +372,7 @@ func (r *Reconciler) delete(mr *resourcesv1alpha1.ManagedResource, log logr.Logg
 	return ctrl.Result{}, nil
 }
 
-func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInject map[string]string, equivalences Equivalences) error {
+func (r *Reconciler) applyNewResources(origin string, newResourcesObjects []object, labelsToInject map[string]string, equivalences Equivalences) error {
 	var (
 		results   = make(chan error)
 		wg        sync.WaitGroup
@@ -409,11 +411,16 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 					if err != nil {
 						return fmt.Errorf("error getting metadata of object %q: %s", resource, err)
 					}
+					curmeta, err := meta.Accessor(current)
+					if err != nil {
+						return fmt.Errorf("error getting metadata of existing object %q: %s", resource, err)
+					}
 
-					// if the ignore annotation is set to false, do nothing (ignore the resource)
-					if ignore(metadata) {
+					// if the actual object shoud be ignored, do nothing (ignore the resource)
+					if ignore(origin, metadata, curmeta) {
 						annotations := current.GetAnnotations()
 						delete(annotations, descriptionAnnotation)
+						delete(annotations, originAnnotation)
 						current.SetAnnotations(annotations)
 						return nil
 					}
@@ -422,7 +429,7 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 						return fmt.Errorf("error injecting labels into object %q: %s", resource, err)
 					}
 
-					return merge(obj.obj, current, obj.forceOverwriteLabels, obj.oldInformation.Labels, obj.forceOverwriteAnnotations, obj.oldInformation.Annotations, scaledHorizontally, scaledVertically)
+					return merge(origin, obj.obj, current, obj.forceOverwriteLabels, obj.oldInformation.Labels, obj.forceOverwriteAnnotations, obj.oldInformation.Annotations, scaledHorizontally, scaledVertically)
 				}); err != nil {
 					if meta.IsNoMatchError(err) {
 						encounteredNoMatchError = true
@@ -558,8 +565,25 @@ func objectKeyFromUnstructured(o *unstructured.Unstructured) string {
 	return objectKey(o.GroupVersionKind().Group, o.GetKind(), o.GetNamespace(), o.GetName())
 }
 
-func ignore(meta metav1.Object) bool {
-	return annotationExistsAndValueTrue(meta, resourcesv1alpha1.Ignore)
+func ignore(origin string, meta, curmeta metav1.Object) bool {
+	if annotationExistsAndValueTrue(meta, resourcesv1alpha1.Ignore) {
+		return true
+	}
+
+	if curmeta != nil && curmeta.GetResourceVersion() != "" {
+		// object already esists
+		// check for marker annotations, if they are not present, the object has been modified
+		// by another maintainer. If the fallback option is given, this is accepted and the
+		// object is ignored further on
+		annotationExists(curmeta, originAnnotation)
+		if annotationExistsAndValueTrue(meta, resourcesv1alpha1.Fallback) {
+			if !annotationExistsAndHasValue(curmeta, descriptionAnnotation, descriptionAnnotationText) {
+				// || (annotationExists(curmeta, originAnnotation) && !annotationExistsHasValue(curmeta, originAnnotation, origin))
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func deleteOnInvalidUpdate(meta metav1.Object) bool {
@@ -578,6 +602,23 @@ func annotationExistsAndValueTrue(meta metav1.Object, key string) bool {
 	val, annotationExists := annotations[key]
 	valueTrue, _ := strconv.ParseBool(val)
 	return annotationExists && valueTrue
+}
+
+func annotationExistsAndHasValue(meta metav1.Object, key string, value string) bool {
+	annotations := meta.GetAnnotations()
+	if annotations == nil {
+		return false
+	}
+	val, annotationExists := annotations[key]
+	return annotationExists && val == value
+}
+
+func annotationExists(meta metav1.Object, key string) bool {
+	annotations := meta.GetAnnotations()
+	if annotations == nil {
+		return false
+	}
+	return true
 }
 
 func (r *Reconciler) cleanOldResources(index *ObjectIndex, mr *resourcesv1alpha1.ManagedResource) (bool, error) {

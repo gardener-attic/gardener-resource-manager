@@ -18,4 +18,5 @@ TODO
 # Packr generated files
 *-packr.go
 
+/cmd/gardener-resource-manager/controller
 /controller

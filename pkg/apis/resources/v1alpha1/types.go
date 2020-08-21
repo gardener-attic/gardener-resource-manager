@@ -30,6 +30,10 @@ const (
 	// true then the controller will not delete the object in case it is removed from the ManagedResource or the
 	// ManagedResource itself is deleted.
 	KeepObject = "resources.gardener.cloud/keep-object"
+	// Fallback is an annotation that tells the resource manager to ignore the resource if it is
+	// maintained by somebody else. This is identified by looking at the at the description annotation implicitly
+	// added by the resource manager
+	Fallback = "resources.gardener.cloud/fallback"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
