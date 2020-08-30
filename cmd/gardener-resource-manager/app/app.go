@@ -198,7 +198,7 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 			if err := c.Watch(
 				&source.Kind{Type: &resourcesv1alpha1.ManagedResource{}},
 				&handler.EnqueueRequestForObject{},
-				filter, extensionspredicate.Or(
+				filter, predicate.Or(
 					predicate.GenerationChangedPredicate{},
 					extensionspredicate.HasOperationAnnotation(),
 					managerpredicate.ConditionStatusChanged(resourcesv1alpha1.ResourcesHealthy, managerpredicate.ConditionChangedToUnhealthy),
@@ -279,7 +279,7 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 						}})
 					},
 				},
-				filter, extensionspredicate.Or(
+				filter, predicate.Or(
 					managerpredicate.ClassChangedPredicate(),
 					// start health checks immediately after MR has been reconciled
 					managerpredicate.ConditionStatusChanged(resourcesv1alpha1.ResourcesApplied, managerpredicate.DefaultConditionChange),
