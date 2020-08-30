@@ -6,10 +6,10 @@
 !cmd/
 !pkg/
 !hack/
-!tools/
 !vendor/
 !VERSION
 !Makefile
+!.golangci.yaml
 !.gitignore
 !go.mod
 !go.sum

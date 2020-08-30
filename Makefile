@@ -12,66 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-REGISTRY                    := eu.gcr.io/gardener-project
-IMAGE_PREFIX                := $(REGISTRY)/gardener
+NAME                        := gardener-resource-manager
+IMAGE_REPOSITORY            := eu.gcr.io/gardener-project/gardener/$(NAME)
 REPO_ROOT                   := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
-VERSION                     := $(shell cat VERSION)
-LD_FLAGS                    := "-w -X github.com/gardener/gardener-resource-manager/pkg/version.Version=$(VERSION)"
+VERSION                     := $(shell cat "$(REPO_ROOT)/VERSION")
+LD_FLAGS                    := "-w -X github.com/gardener/$(NAME)/pkg/version.Version=$(VERSION)"
 VERIFY                      := true
 
-### Build commands
-
-.PHONY: format
-format:
-	@./hack/format.sh
-
-.PHONY: clean
-clean:
-	@./hack/clean.sh
-
-.PHONY: generate
-generate:
-	@./hack/generate.sh
-
-.PHONY: check
-check:
-	@./hack/check.sh
-
-.PHONY: test
-test:
-	@./hack/test.sh
-
-.PHONY: verify
-verify: check generate test format
-
-.PHONY: install
-install:
-	@./hack/install.sh
-
-.PHONY: all
-ifeq ($(VERIFY),true)
-all: verify generate install
-else
-all: generate install
-endif
-
-### Docker commands
-
-.PHONY: docker-login
-docker-login:
-	@gcloud auth activate-service-account --key-file .kube-secrets/gcr/gcr-readwrite.json
-
-.PHONY: docker-image
-docker-image:
-	@docker build --build-arg VERIFY=$(VERIFY) -t $(IMAGE_PREFIX)/gardener-resource-manager:$(VERSION) -t $(IMAGE_PREFIX)/gardener-resource-manager:latest -f Dockerfile --target gardener-resource-manager .
-
-### Debug / Development commands
-
-.PHONY: revendor
-revendor:
-	@GO111MODULE=on go mod vendor
-	@GO111MODULE=on go mod tidy
-	@$(REPO_ROOT)/hack/update-github-templates.sh
+#########################################
+# Rules for local development scenarios #
+#########################################
 
 .PHONY: start
 start:
@@ -84,3 +34,83 @@ start:
 	  --max-concurrent-workers=10 \
 	  --health-sync-period=60s \
 	  --health-max-concurrent-workers=10
+
+#################################################################
+# Rules related to binary build, Docker image build and release #
+#################################################################
+
+.PHONY: install
+install:
+	@LD_FLAGS=$(LD_FLAGS) $(REPO_ROOT)/vendor/github.com/gardener/gardener/hack/install.sh ./...
+
+.PHONY: docker-login
+docker-login:
+	@gcloud auth activate-service-account --key-file .kube-secrets/gcr/gcr-readwrite.json
+
+.PHONY: docker-image
+docker-image:
+	@docker build --build-arg VERIFY=$(VERIFY) -t $(IMAGE_REPOSITORY):$(VERSION) -f Dockerfile --target gardener-resource-manager .
+
+.PHONY: all
+ifeq ($(VERIFY),true)
+all: verify generate install
+else
+all: generate install
+endif
+
+#####################################################################
+# Rules for verification, formatting, linting, testing and cleaning #
+#####################################################################
+
+.PHONY: install-requirements
+install-requirements:
+	@go install -mod=vendor $(REPO_ROOT)/vendor/github.com/golang/mock/mockgen
+	@go install -mod=vendor $(REPO_ROOT)/vendor/github.com/onsi/ginkgo/ginkgo
+	@$(REPO_ROOT)/vendor/github.com/gardener/gardener/hack/install-requirements.sh
+
+.PHONY: revendor
+revendor:
+	@GO111MODULE=on go mod vendor
+	@GO111MODULE=on go mod tidy
+	@chmod +x $(REPO_ROOT)/vendor/github.com/gardener/gardener/hack/*
+	@chmod +x $(REPO_ROOT)/vendor/github.com/gardener/gardener/hack/.ci/*
+	@$(REPO_ROOT)/hack/update-github-templates.sh
+
+.PHONY: clean
+clean:
+	@$(REPO_ROOT)/vendor/github.com/gardener/gardener/hack/clean.sh ./cmd/... ./pkg/...
+
+.PHONY: check-generate
+check-generate:
+	@$(REPO_ROOT)/vendor/github.com/gardener/gardener/hack/check-generate.sh $(REPO_ROOT)
+
+.PHONY: check
+check:
+	@$(REPO_ROOT)/vendor/github.com/gardener/gardener/hack/check.sh --golangci-lint-config=./.golangci.yaml ./cmd/... ./pkg/...
+	@$(REPO_ROOT)/vendor/github.com/gardener/gardener/hack/check-charts.sh ./charts
+
+.PHONY: generate
+generate:
+	@$(REPO_ROOT)/vendor/github.com/gardener/gardener/hack/generate.sh ./charts/... ./cmd/... ./pkg/...
+
+.PHONY: format
+format:
+	@$(REPO_ROOT)/vendor/github.com/gardener/gardener/hack/format.sh ./cmd ./pkg
+
+.PHONY: test
+test:
+	@$(REPO_ROOT)/vendor/github.com/gardener/gardener/hack/test.sh --skipPackage test/e2e/networkpolicies,test/integration -r ./cmd/... ./pkg/...
+
+.PHONY: test-cov
+test-cov:
+	@$(REPO_ROOT)/vendor/github.com/gardener/gardener/hack/test-cover.sh -r ./cmd/... ./pkg/...
+
+.PHONY: test-clean
+test-clean:
+	@$(REPO_ROOT)/vendor/github.com/gardener/gardener/hack/test-cover-clean.sh
+
+.PHONY: verify
+verify: check format test
+
+.PHONY: verify-extended
+verify-extended: install-requirements check-generate check format test-cov test-clean

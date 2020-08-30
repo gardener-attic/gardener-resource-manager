@@ -4,7 +4,7 @@ FROM golang:1.14.7 AS builder-base
 WORKDIR /go/src/github.com/gardener/gardener-resource-manager
 COPY . .
 
-RUN ./hack/install-requirements.sh
+RUN make install-requirements
 
 #############      builder                                  #############
 FROM builder-base AS builder
