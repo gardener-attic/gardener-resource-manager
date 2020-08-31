@@ -99,12 +99,19 @@ type ManagedResourceStatus struct {
 	Resources []ObjectReference `json:"resources,omitempty"`
 }
 
+// ObjectReference is used to store reconcilation relevant information about the
+// last deployed version of objects managed by a ManagedResource
 type ObjectReference struct {
 	corev1.ObjectReference `json:",inline"`
 	// Labels is a map of labels that were used during last update of the resource.
 	Labels map[string]string `json:"labels,omitempty"`
 	// Annotations is a map of annotations that were used during last update of the resource.
 	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+// GetAnnotations return the actual annotations and is used as implementation for the AnnotationProvider interface
+func (o ObjectReference) GetAnnotations() map[string]string {
+	return o.Annotations
 }
 
 // ConditionType is the type of a condition.

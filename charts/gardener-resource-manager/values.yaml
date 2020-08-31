@@ -11,6 +11,7 @@ controllers:
     syncPeriod: 1m0s
     concurrentSyncs: 10
     alwaysUpdate: false
+    # clusterID: ""
   managedResourceHealth:
     syncPeriod: 1m0s
     concurrentSyncs: 10

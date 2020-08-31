@@ -38,6 +38,9 @@ spec:
         {{- if .Values.controllers.cacheResyncPeriod }}
         - --cache-resync-period={{ .Values.controllers.cacheResyncPeriod }}
         {{- end }}
+        {{- if .Values.controllers.managedResource.clusterID }}
+        - --cluster-id={{ .Values.controllers.managedResource.clusterID }}
+        {{- end }}
         - --sync-period={{ .Values.controllers.managedResource.syncPeriod }}
         - --max-concurrent-workers={{ .Values.controllers.managedResource.concurrentSyncs }}
         - --health-sync-period={{ .Values.controllers.managedResourceHealth.syncPeriod }}

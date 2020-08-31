@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -77,11 +78,12 @@ type Reconciler struct {
 	class        *ClassFilter
 	alwaysUpdate bool
 	syncPeriod   time.Duration
+	cluster      string
 }
 
 // NewReconciler creates a new reconciler with the given target client.
-func NewReconciler(ctx context.Context, log logr.Logger, c, targetClient client.Client, targetRESTMapper *restmapper.DeferredDiscoveryRESTMapper, targetScheme *runtime.Scheme, class *ClassFilter, alwaysUpdate bool, syncPeriod time.Duration) *Reconciler {
-	return &Reconciler{ctx, log, c, targetClient, targetRESTMapper, targetScheme, class, alwaysUpdate, syncPeriod}
+func NewReconciler(ctx context.Context, log logr.Logger, c, targetClient client.Client, targetRESTMapper *restmapper.DeferredDiscoveryRESTMapper, targetScheme *runtime.Scheme, class *ClassFilter, alwaysUpdate bool, syncPeriod time.Duration, clusterID string) *Reconciler {
+	return &Reconciler{ctx, log, c, targetClient, targetRESTMapper, targetScheme, class, alwaysUpdate, syncPeriod, clusterID}
 }
 
 // Reconcile implements `reconcile.Reconciler`.
@@ -115,6 +117,51 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return r.reconcile(mr, log)
 }
 
+func (r *Reconciler) determineClusterIdentity(c client.Client, force bool) (string, error) {
+	cm := corev1.ConfigMap{}
+	err := c.Get(r.ctx, client.ObjectKey{Name: "cluster-identity", Namespace: "kube-system"}, &cm)
+	if err == nil {
+		if id, ok := cm.Data["cluster-identity"]; ok {
+			return id, nil
+		}
+		if force {
+			return "", fmt.Errorf("cannot determine cluster identity from configmap: no cluster-identity entry ")
+		}
+	} else {
+		if force {
+			return "", fmt.Errorf("cannot determine cluster identity from configmap: %s", err)
+		}
+	}
+	return "", nil
+}
+
+func (r *Reconciler) origin(mr *resourcesv1alpha1.ManagedResource) string {
+	var err error
+	if r.cluster == "<cluster>" || r.cluster == "<default>" {
+		r.cluster, err = r.determineClusterIdentity(r.client, r.cluster == "<cluster>")
+		if err != nil {
+			panic(err)
+		}
+	}
+	if r.cluster != "" {
+		return r.cluster + ":" + mr.Namespace + "/" + mr.Name
+	}
+	return mr.Namespace + "/" + mr.Name
+}
+
+func MatchOrigin(origin, found string) bool {
+	if found == origin {
+		return true
+	}
+	parts := strings.Split(origin, ":")
+	if len(parts) > 1 {
+		// handle format migration for adding cluster-id later
+		fparts := strings.Split(found, ":")
+		return len(fparts) == 1 && parts[1] == found
+	}
+	return false
+}
+
 func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.Logger) (ctrl.Result, error) {
 	log.Info("Starting to reconcile ManagedResource")
 
@@ -135,7 +182,7 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 		decodingErrors []*decodingError
 	)
 
-	origin := mr.Namespace + "/" + mr.Name
+	origin := r.origin(mr)
 
 	if v := mr.Spec.ForceOverwriteLabels; v != nil {
 		forceOverwriteLabels = *v
@@ -565,20 +612,20 @@ func objectKeyFromUnstructured(o *unstructured.Unstructured) string {
 	return objectKey(o.GroupVersionKind().Group, o.GetKind(), o.GetNamespace(), o.GetName())
 }
 
-func ignore(origin string, meta, curmeta metav1.Object) bool {
-	if annotationExistsAndValueTrue(meta, resourcesv1alpha1.Ignore) {
-		return true
-	}
+type AnnotationProvider interface {
+	GetAnnotations() map[string]string
+}
 
+func ignoreFallback(origin string, meta AnnotationProvider, curmeta metav1.Object) bool {
 	if curmeta != nil && curmeta.GetResourceVersion() != "" {
 		// object already esists
-		// check for marker annotations, if they are not present, the object has been modified
-		// by another maintainer. If the fallback option is given, this is accepted and the
-		// object is ignored further on
-		annotationExists(curmeta, originAnnotation)
+		// check for marker annotations, if they are not present or they indicate another origin,
+		// the object has been modified by another maintainer.
+		// If the fallback option is given, this is accepted and the
+		// object is ignored further on, otherwise the object will be reconciled.
 		if annotationExistsAndValueTrue(meta, resourcesv1alpha1.Fallback) {
-			if !annotationExistsAndHasValue(curmeta, descriptionAnnotation, descriptionAnnotationText) {
-				// || (annotationExists(curmeta, originAnnotation) && !annotationExistsHasValue(curmeta, originAnnotation, origin))
+			if !annotationExistsAndMatchValue(curmeta, descriptionAnnotation, descriptionAnnotationText, EqualValueMatcher) ||
+				(annotationExists(curmeta, originAnnotation) && !annotationExistsAndMatchValue(curmeta, originAnnotation, origin, MatchOrigin)) {
 				return true
 			}
 		}
@@ -586,15 +633,23 @@ func ignore(origin string, meta, curmeta metav1.Object) bool {
 	return false
 }
 
+func ignore(origin string, meta AnnotationProvider, curmeta metav1.Object) bool {
+	if annotationExistsAndValueTrue(meta, resourcesv1alpha1.Ignore) {
+		return true
+	}
+
+	return ignoreFallback(origin, meta, curmeta)
+}
+
 func deleteOnInvalidUpdate(meta metav1.Object) bool {
 	return annotationExistsAndValueTrue(meta, resourcesv1alpha1.DeleteOnInvalidUpdate)
 }
 
-func keepObject(meta metav1.Object) bool {
-	return annotationExistsAndValueTrue(meta, resourcesv1alpha1.KeepObject)
+func keepObject(origin string, meta AnnotationProvider, curmeta metav1.Object) bool {
+	return annotationExistsAndValueTrue(meta, resourcesv1alpha1.KeepObject) || ignoreFallback(origin, meta, curmeta)
 }
 
-func annotationExistsAndValueTrue(meta metav1.Object, key string) bool {
+func annotationExistsAndValueTrue(meta AnnotationProvider, key string) bool {
 	annotations := meta.GetAnnotations()
 	if annotations == nil {
 		return false
@@ -604,16 +659,22 @@ func annotationExistsAndValueTrue(meta metav1.Object, key string) bool {
 	return annotationExists && valueTrue
 }
 
-func annotationExistsAndHasValue(meta metav1.Object, key string, value string) bool {
+type ValueMatcher func(check, actual string) bool
+
+func EqualValueMatcher(check, actual string) bool {
+	return check == actual
+}
+
+func annotationExistsAndMatchValue(meta AnnotationProvider, key string, value string, matcher ValueMatcher) bool {
 	annotations := meta.GetAnnotations()
 	if annotations == nil {
 		return false
 	}
 	val, annotationExists := annotations[key]
-	return annotationExists && val == value
+	return annotationExists && matcher(value, val)
 }
 
-func annotationExists(meta metav1.Object, key string) bool {
+func annotationExists(meta AnnotationProvider, key string) bool {
 	annotations := meta.GetAnnotations()
 	if annotations == nil {
 		return false
@@ -629,6 +690,7 @@ func (r *Reconciler) cleanOldResources(index *ObjectIndex, mr *resourcesv1alpha1
 	}
 
 	var (
+		origin          = r.origin(mr)
 		results         = make(chan *output)
 		wg              sync.WaitGroup
 		deletePVCs      = mr.Spec.DeletePersistentVolumeClaims != nil && *mr.Spec.DeletePersistentVolumeClaims
@@ -665,8 +727,7 @@ func (r *Reconciler) cleanOldResources(index *ObjectIndex, mr *resourcesv1alpha1
 					results <- &output{resource, false, nil}
 					return
 				}
-
-				if keepObject(obj) {
+				if keepObject(origin, oldResource, obj) {
 					r.log.Info("Keeping object in the system as "+resourcesv1alpha1.KeepObject+" annotation found", "resource", unstructuredToString(obj))
 					results <- &output{resource, false, nil}
 					return

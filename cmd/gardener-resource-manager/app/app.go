@@ -86,6 +86,7 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 
 		targetKubeconfigPath string
 		kubeconfigPath       string
+		clusterID            string
 
 		namespace     string
 		resourceClass string
@@ -188,6 +189,7 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 						filter,
 						alwaysUpdate,
 						syncPeriod,
+						clusterID,
 					),
 				),
 			})
@@ -345,6 +347,7 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 	cmd.Flags().StringVar(&targetKubeconfigPath, "target-kubeconfig", "", "path to the kubeconfig for the target cluster")
 	cmd.Flags().StringVar(&namespace, "namespace", "", "namespace in which the ManagedResources should be observed (defaults to all namespaces)")
 	cmd.Flags().StringVar(&resourceClass, "resource-class", managedresources.DefaultClass, "resource class used to filter resource resources")
+	cmd.Flags().StringVar(&clusterID, "cluster-id", "", "optional cluster id for source cluster")
 	cmd.Flags().BoolVar(&alwaysUpdate, "always-update", false, "if set to false then a resource will only be updated if its desired state differs from the actual state. otherwise, an update request will be always sent.")
 
 	return cmd
