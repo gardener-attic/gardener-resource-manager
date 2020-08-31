@@ -1,0 +1,13 @@
+run:
+  concurrency: 4
+  deadline: 10m
+
+linters:
+  disable:
+  - unused
+
+issues:
+  exclude-rules:
+  - linters:
+    - staticcheck
+    text: "SA1019:" # Excludes messages where deprecated variables are used
