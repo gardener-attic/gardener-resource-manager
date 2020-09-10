@@ -60,6 +60,29 @@ const (
 	FinalizerName = "resources.gardener.cloud/gardener-resource-manager"
 )
 
+const (
+	// Cluster Identity Handling
+	// The Cluster identity is used to remember the origin of an object maintained
+	// on behalf of a ManagedResource object.
+	// There are several modes the cluster identity is determined. First of all
+	// it can explicitly be specified on the command line. Here it is possible
+	// to select determination methods by choosing one of the following constants.
+	// If nothing is specified the empty identity will be used for cluster local
+	// usage scenarios of the resource manager
+
+	// IdentityByCluster extracts the cluster identity from the cluster-id
+	// config map in the kube-system namespace. This is useful for cross-cluster
+	// usage scenarios of the resource manager. This mode enforces the usage
+	// of the standard cluster identity config map and fails if the identity
+	// cannot be determined this way
+	IdentityByCluster = "<cluster>"
+
+	// IdentityByDefault tries to determine a unique cluster identity using
+	// the cluster-identity config map. It this fails the default non-unique
+	// (empty) cluster identity will be used.
+	IdentifyByDefault = "<default>"
+)
+
 var (
 	deletePropagationForeground = metav1.DeletePropagationForeground
 	foregroundDeletionAPIGroups = sets.NewString(appsv1.GroupName, extensionsv1beta1.GroupName, batchv1.GroupName)
@@ -137,8 +160,8 @@ func (r *Reconciler) determineClusterIdentity(c client.Client, force bool) (stri
 
 func (r *Reconciler) origin(mr *resourcesv1alpha1.ManagedResource) string {
 	var err error
-	if r.cluster == "<cluster>" || r.cluster == "<default>" {
-		r.cluster, err = r.determineClusterIdentity(r.client, r.cluster == "<cluster>")
+	if r.cluster == IdentityByCluster || r.cluster == IdentifyByDefault {
+		r.cluster, err = r.determineClusterIdentity(r.client, r.cluster == IdentityByCluster)
 		if err != nil {
 			panic(err)
 		}
@@ -149,6 +172,7 @@ func (r *Reconciler) origin(mr *resourcesv1alpha1.ManagedResource) string {
 	return mr.Namespace + "/" + mr.Name
 }
 
+// MatchOrigin matches a found origin spec of an object against the actual one.
 func MatchOrigin(origin, found string) bool {
 	if found == origin {
 		return true
@@ -618,7 +642,7 @@ type AnnotationProvider interface {
 
 func ignoreFallback(origin string, meta AnnotationProvider, curmeta metav1.Object) bool {
 	if curmeta != nil && curmeta.GetResourceVersion() != "" {
-		// object already esists
+		// object already exists
 		// check for marker annotations, if they are not present or they indicate another origin,
 		// the object has been modified by another maintainer.
 		// If the fallback option is given, this is accepted and the
