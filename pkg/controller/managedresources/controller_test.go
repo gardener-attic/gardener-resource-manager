@@ -17,7 +17,10 @@ package managedresources
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
 )
 
 var _ = Describe("Controller", func() {
@@ -108,5 +111,68 @@ var _ = Describe("Controller", func() {
 			Expect(injectLabels(obj, labels)).To(Succeed())
 			Expect(obj).To(Equal(expected))
 		})
+	})
+	Describe("#ignore", func() {
+		origin := "origin"
+		newmeta := &metav1.ObjectMeta{}
+		newmeta.SetAnnotations(map[string]string{
+			descriptionAnnotation: descriptionAnnotationText,
+			originAnnotation:      origin,
+		})
+		actual := newmeta.DeepCopy()
+		actual.SetResourceVersion("0815")
+
+		Context("non-fallback", func() {
+			It("accept managed", func() {
+				Expect(ignore(origin, newmeta, actual)).To(BeFalse())
+			})
+			It("accept new", func() {
+				actual := &metav1.ObjectMeta{}
+				Expect(ignore(origin, newmeta, actual)).To(BeFalse())
+			})
+			It("ignore unmanaged", func() {
+				actual := actual.DeepCopy()
+				delete(actual.Annotations, descriptionAnnotation)
+				Expect(ignore(origin, newmeta, actual)).To(BeFalse())
+			})
+			It("don't ignore foreign managed", func() {
+				actual := actual.DeepCopy()
+				actual.Annotations[originAnnotation] = "other"
+				Expect(ignore(origin, newmeta, actual)).To(BeFalse())
+			})
+			It("don't ignore resource marked as ignore", func() {
+				newmeta := &metav1.ObjectMeta{}
+				newmeta.SetAnnotations(map[string]string{v1alpha1.Ignore: "true"})
+				Expect(ignore(origin, newmeta, actual)).To(BeTrue())
+			})
+		})
+		Context("fallback", func() {
+			newmeta := newmeta.DeepCopy()
+			newmeta.Annotations[v1alpha1.Fallback] = "true"
+
+			It("accept managed", func() {
+				Expect(ignore(origin, newmeta, actual)).To(BeFalse())
+			})
+			It("accept new", func() {
+				actual := &metav1.ObjectMeta{}
+				Expect(ignore(origin, newmeta, actual)).To(BeFalse())
+			})
+			It("ignore unmanaged", func() {
+				actual := actual.DeepCopy()
+				delete(actual.Annotations, descriptionAnnotation)
+				Expect(ignore(origin, newmeta, actual)).To(BeTrue())
+			})
+			It("ignore foreign managed", func() {
+				actual := actual.DeepCopy()
+				actual.Annotations[originAnnotation] = "other"
+				Expect(ignore(origin, newmeta, actual)).To(BeTrue())
+			})
+			It("ignore resource marked as ignore", func() {
+				newmeta := &metav1.ObjectMeta{}
+				newmeta.SetAnnotations(map[string]string{v1alpha1.Ignore: "true"})
+				Expect(ignore(origin, newmeta, actual)).To(BeTrue())
+			})
+		})
+
 	})
 })

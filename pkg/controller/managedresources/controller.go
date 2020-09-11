@@ -101,7 +101,7 @@ type Reconciler struct {
 	class        *ClassFilter
 	alwaysUpdate bool
 	syncPeriod   time.Duration
-	cluster      string
+	clusterID    string
 }
 
 // NewReconciler creates a new reconciler with the given target client.
@@ -160,14 +160,14 @@ func (r *Reconciler) determineClusterIdentity(c client.Client, force bool) (stri
 
 func (r *Reconciler) origin(mr *resourcesv1alpha1.ManagedResource) string {
 	var err error
-	if r.cluster == IdentityByCluster || r.cluster == IdentifyByDefault {
-		r.cluster, err = r.determineClusterIdentity(r.client, r.cluster == IdentityByCluster)
+	if r.clusterID == IdentityByCluster || r.clusterID == IdentifyByDefault {
+		r.clusterID, err = r.determineClusterIdentity(r.client, r.clusterID == IdentityByCluster)
 		if err != nil {
 			panic(err)
 		}
 	}
-	if r.cluster != "" {
-		return r.cluster + ":" + mr.Namespace + "/" + mr.Name
+	if r.clusterID != "" {
+		return r.clusterID + ":" + mr.Namespace + "/" + mr.Name
 	}
 	return mr.Namespace + "/" + mr.Name
 }
@@ -661,7 +661,6 @@ func ignore(origin string, meta AnnotationProvider, curmeta metav1.Object) bool 
 	if annotationExistsAndValueTrue(meta, resourcesv1alpha1.Ignore) {
 		return true
 	}
-
 	return ignoreFallback(origin, meta, curmeta)
 }
 
