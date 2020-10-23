@@ -1,9 +1,12 @@
 /.kube-secrets
 /tmp
 /local
+/bin
 /dev
 **/dev
 
+*.coverprofile
+*.html
 .vscode
 .idea
 .DS_Store
