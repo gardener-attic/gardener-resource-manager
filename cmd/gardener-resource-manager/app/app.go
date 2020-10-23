@@ -17,6 +17,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -42,6 +43,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/discovery"
 	memcache "k8s.io/client-go/discovery/cached/memory"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
@@ -69,6 +71,9 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 	entryLog := log.WithName("entrypoint")
 
 	var (
+		metricsBindAddress string
+		healthBindAddress  string
+
 		leaderElection              bool
 		leaderElectionNamespace     string
 		leaderElectionLeaseDuration time.Duration
@@ -125,9 +130,34 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 				RetryPeriod:             &leaderElectionRetryPeriod,
 				SyncPeriod:              &cacheResyncPeriod,
 				Namespace:               namespace,
+				MetricsBindAddress:      metricsBindAddress,
+				HealthProbeBindAddress:  healthBindAddress,
+				LivenessEndpointName:    "/healthz",
 			})
 			if err != nil {
 				return fmt.Errorf("could not instantiate manager: %+v", err)
+			}
+
+			kubernetesClientset, err := kubernetes.NewForConfig(mgr.GetConfig())
+			if err != nil {
+				return fmt.Errorf("could not create discovery client: %+v", err)
+			}
+
+			if err := mgr.AddHealthzCheck("healthz", func(_ *http.Request) error {
+				result := kubernetesClientset.Discovery().RESTClient().Get().AbsPath("/healthz").Do(ctx)
+				if err2 := result.Error(); err2 != nil {
+					return err2
+				}
+
+				var statusCode int
+				result.StatusCode(&statusCode)
+				if statusCode != http.StatusOK {
+					return fmt.Errorf("failed talking to the seed's kube-apiserver (status code: %d)", statusCode)
+				}
+
+				return nil
+			}); err != nil {
+				return fmt.Errorf("could not add healthz check to manager: %+v", err)
 			}
 
 			utilruntime.Must(resourcesv1alpha1.AddToScheme(mgr.GetScheme()))
@@ -346,6 +376,8 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 	cmd.Flags().StringVar(&namespace, "namespace", "", "namespace in which the ManagedResources should be observed (defaults to all namespaces)")
 	cmd.Flags().StringVar(&resourceClass, "resource-class", managedresources.DefaultClass, "resource class used to filter resource resources")
 	cmd.Flags().BoolVar(&alwaysUpdate, "always-update", false, "if set to false then a resource will only be updated if its desired state differs from the actual state. otherwise, an update request will be always sent.")
+	cmd.Flags().StringVar(&metricsBindAddress, "metrics-bind-address", ":8080", "bind address for the metrics server")
+	cmd.Flags().StringVar(&healthBindAddress, "health-bind-address", ":8081", "bind address for the health server")
 
 	return cmd
 }
