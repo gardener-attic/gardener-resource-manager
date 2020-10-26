@@ -1,6 +1,6 @@
 module github.com/gardener/gardener-resource-manager
 
-go 1.13
+go 1.15
 
 require (
 	github.com/gardener/gardener v1.11.3

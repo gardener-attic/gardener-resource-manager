@@ -22,7 +22,7 @@ import (
 	"github.com/gardener/gardener-resource-manager/pkg/log"
 
 	runtimelog "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
+	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 )
 
 func main() {
