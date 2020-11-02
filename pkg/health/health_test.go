@@ -26,7 +26,7 @@ import (
 	"github.com/onsi/gomega/types"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
@@ -39,52 +39,52 @@ func TestHealth(t *testing.T) {
 var _ = Describe("health", func() {
 	Context("CheckCustomResourceDefinition", func() {
 		DescribeTable("crds",
-			func(crd *apiextensionsv1beta1.CustomResourceDefinition, matcher types.GomegaMatcher) {
+			func(crd *apiextensionsv1.CustomResourceDefinition, matcher types.GomegaMatcher) {
 				err := health.CheckCustomResourceDefinition(crd)
 				Expect(err).To(matcher)
 			},
-			Entry("terminating", &apiextensionsv1beta1.CustomResourceDefinition{
-				Status: apiextensionsv1beta1.CustomResourceDefinitionStatus{
-					Conditions: []apiextensionsv1beta1.CustomResourceDefinitionCondition{
+			Entry("terminating", &apiextensionsv1.CustomResourceDefinition{
+				Status: apiextensionsv1.CustomResourceDefinitionStatus{
+					Conditions: []apiextensionsv1.CustomResourceDefinitionCondition{
 						{
-							Type:   apiextensionsv1beta1.NamesAccepted,
-							Status: apiextensionsv1beta1.ConditionTrue,
+							Type:   apiextensionsv1.NamesAccepted,
+							Status: apiextensionsv1.ConditionTrue,
 						},
 						{
-							Type:   apiextensionsv1beta1.Established,
-							Status: apiextensionsv1beta1.ConditionTrue,
+							Type:   apiextensionsv1.Established,
+							Status: apiextensionsv1.ConditionTrue,
 						},
 						{
-							Type:   apiextensionsv1beta1.Terminating,
-							Status: apiextensionsv1beta1.ConditionTrue,
-						},
-					},
-				},
-			}, HaveOccurred()),
-			Entry("with conflicting name", &apiextensionsv1beta1.CustomResourceDefinition{
-				Status: apiextensionsv1beta1.CustomResourceDefinitionStatus{
-					Conditions: []apiextensionsv1beta1.CustomResourceDefinitionCondition{
-						{
-							Type:   apiextensionsv1beta1.NamesAccepted,
-							Status: apiextensionsv1beta1.ConditionFalse,
-						},
-						{
-							Type:   apiextensionsv1beta1.Established,
-							Status: apiextensionsv1beta1.ConditionFalse,
+							Type:   apiextensionsv1.Terminating,
+							Status: apiextensionsv1.ConditionTrue,
 						},
 					},
 				},
 			}, HaveOccurred()),
-			Entry("healthy", &apiextensionsv1beta1.CustomResourceDefinition{
-				Status: apiextensionsv1beta1.CustomResourceDefinitionStatus{
-					Conditions: []apiextensionsv1beta1.CustomResourceDefinitionCondition{
+			Entry("with conflicting name", &apiextensionsv1.CustomResourceDefinition{
+				Status: apiextensionsv1.CustomResourceDefinitionStatus{
+					Conditions: []apiextensionsv1.CustomResourceDefinitionCondition{
 						{
-							Type:   apiextensionsv1beta1.NamesAccepted,
-							Status: apiextensionsv1beta1.ConditionTrue,
+							Type:   apiextensionsv1.NamesAccepted,
+							Status: apiextensionsv1.ConditionFalse,
 						},
 						{
-							Type:   apiextensionsv1beta1.Established,
-							Status: apiextensionsv1beta1.ConditionTrue,
+							Type:   apiextensionsv1.Established,
+							Status: apiextensionsv1.ConditionFalse,
+						},
+					},
+				},
+			}, HaveOccurred()),
+			Entry("healthy", &apiextensionsv1.CustomResourceDefinition{
+				Status: apiextensionsv1.CustomResourceDefinitionStatus{
+					Conditions: []apiextensionsv1.CustomResourceDefinitionCondition{
+						{
+							Type:   apiextensionsv1.NamesAccepted,
+							Status: apiextensionsv1.ConditionTrue,
+						},
+						{
+							Type:   apiextensionsv1.Established,
+							Status: apiextensionsv1.ConditionTrue,
 						},
 					},
 				},
