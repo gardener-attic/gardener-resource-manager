@@ -17,8 +17,8 @@ package health
 import (
 	"fmt"
 
-	"github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
-	"github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1/helper"
+	"github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
+	"github.com/gardener/gardener-resource-manager/api/resources/v1alpha1/helper"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -198,16 +198,14 @@ func CheckJob(job *batchv1.Job) error {
 	return nil
 }
 
-var (
-	healthyPodPhases = []corev1.PodPhase{
-		corev1.PodRunning, corev1.PodSucceeded,
-	}
-)
+var healthyPodPhases = []corev1.PodPhase{
+	corev1.PodRunning, corev1.PodSucceeded,
+}
 
 // CheckPod checks whether the given Pod is healthy.
 // A Pod is considered healthy if its `.status.phase` is `Running` or `Succeeded`.
 func CheckPod(pod *corev1.Pod) error {
-	var phase = pod.Status.Phase
+	phase := pod.Status.Phase
 	for _, healthyPhase := range healthyPodPhases {
 		if phase == healthyPhase {
 			return nil
@@ -226,7 +224,7 @@ func CheckReplicaSet(rs *appsv1.ReplicaSet) error {
 		return fmt.Errorf("observed generation outdated (%d/%d)", rs.Status.ObservedGeneration, rs.Generation)
 	}
 
-	var replicas = rs.Spec.Replicas
+	replicas := rs.Spec.Replicas
 	if replicas != nil && rs.Status.ReadyReplicas < *replicas {
 		return fmt.Errorf("ReplicaSet does not have minimum availability")
 	}
@@ -242,7 +240,7 @@ func CheckReplicationController(rc *corev1.ReplicationController) error {
 		return fmt.Errorf("observed generation outdated (%d/%d)", rc.Status.ObservedGeneration, rc.Generation)
 	}
 
-	var replicas = rc.Spec.Replicas
+	replicas := rc.Spec.Replicas
 	if replicas != nil && rc.Status.ReadyReplicas < *replicas {
 		return fmt.Errorf("ReplicationController does not have minimum availability")
 	}

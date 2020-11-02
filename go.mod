@@ -4,6 +4,7 @@ go 1.15
 
 require (
 	github.com/gardener/gardener v1.11.3
+	github.com/gardener/gardener-resource-manager/api v0.0.0-00010101000000-000000000000
 	github.com/gardener/hvpa-controller v0.3.1
 	github.com/go-logr/logr v0.1.0
 	github.com/golang/mock v1.4.4-0.20200731163441-8734ec565a4d
@@ -25,4 +26,7 @@ require (
 	sigs.k8s.io/controller-runtime v0.6.3
 )
 
-replace k8s.io/client-go => k8s.io/client-go v0.18.10
+replace (
+	github.com/gardener/gardener-resource-manager/api => ./api
+	k8s.io/client-go => k8s.io/client-go v0.18.10
+)

@@ -15,7 +15,7 @@
 package managedresources
 
 import (
-	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
+	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -23,10 +23,7 @@ import (
 )
 
 var _ = Describe("Reference sorter", func() {
-
-	var (
-		refs, refsBase []resourcesv1alpha1.ObjectReference
-	)
+	var refs, refsBase []resourcesv1alpha1.ObjectReference
 
 	BeforeEach(func() {
 		refsBase = []resourcesv1alpha1.ObjectReference{
@@ -65,9 +62,7 @@ var _ = Describe("Reference sorter", func() {
 	})
 
 	Describe("#newReferenceSorter", func() {
-		var (
-			sorter referenceSorter
-		)
+		var sorter referenceSorter
 
 		BeforeEach(func() {
 			sorter = newReferenceSorter(refs).(referenceSorter)
@@ -109,5 +104,4 @@ var _ = Describe("Reference sorter", func() {
 			}))
 		})
 	})
-
 })

@@ -17,7 +17,7 @@ package manager
 import (
 	"context"
 
-	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
+	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
 	mockclient "github.com/gardener/gardener-resource-manager/pkg/mock/controller-runtime/client"
 	. "github.com/gardener/gardener-resource-manager/pkg/test"
 
@@ -47,7 +47,7 @@ var _ = Describe("Resource Manager", func() {
 	})
 
 	Describe("Secrets", func() {
-		var ctx = context.TODO()
+		ctx := context.TODO()
 
 		It("should correctly create a managed secret", func() {
 			var (

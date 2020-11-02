@@ -17,7 +17,7 @@ package health_test
 import (
 	"testing"
 
-	"github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
+	"github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
 	"github.com/gardener/gardener-resource-manager/pkg/health"
 
 	. "github.com/onsi/ginkgo"
