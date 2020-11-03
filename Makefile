@@ -92,10 +92,11 @@ check:
 .PHONY: generate
 generate:
 	@$(REPO_ROOT)/vendor/github.com/gardener/gardener/hack/generate.sh ./cmd/... ./pkg/...
+	@cd $(REPO_ROOT)/api && GO111MODULE=on go generate ./...
 
 .PHONY: format
 format:
-	@$(REPO_ROOT)/vendor/github.com/gardener/gardener/hack/format.sh ./cmd ./pkg
+	@$(REPO_ROOT)/vendor/github.com/gardener/gardener/hack/format.sh ./cmd ./pkg ./api
 
 .PHONY: test
 test:

@@ -15,7 +15,7 @@
 package managedresources
 
 import (
-	"github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
+	"github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -24,7 +24,6 @@ import (
 )
 
 var _ = Describe("ObjectIndex", func() {
-
 	Describe("#NewObjectIndex, #Lookup", func() {
 		It("without equivalences", func() {
 			oldRef := v1alpha1.ObjectReference{
@@ -119,5 +118,4 @@ var _ = Describe("ObjectIndex", func() {
 			Expect(index.Found(unusedRef)).To(BeFalse())
 		})
 	})
-
 })

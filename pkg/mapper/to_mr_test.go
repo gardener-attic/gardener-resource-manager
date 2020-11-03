@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
+	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
 	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources"
 	"github.com/gardener/gardener-resource-manager/pkg/mapper"
 	mockclient "github.com/gardener/gardener-resource-manager/pkg/mock/controller-runtime/client"

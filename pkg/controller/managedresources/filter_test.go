@@ -20,7 +20,7 @@ package managedresources_test
 import (
 	"fmt"
 
-	"github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
+	"github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
 	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 

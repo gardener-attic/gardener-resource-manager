@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1"
-	helper "github.com/gardener/gardener-resource-manager/pkg/apis/resources/v1alpha1/helper"
+	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
+	helper "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1/helper"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -33,7 +33,6 @@ func TestHelper(t *testing.T) {
 }
 
 var _ = Describe("helper", func() {
-
 	Describe("#MergeConditions", func() {
 		It("should merge the conditions", func() {
 			var (

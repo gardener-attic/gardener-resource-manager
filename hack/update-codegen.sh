@@ -25,6 +25,6 @@ PROJECT_ROOT=$(dirname $0)/..
 bash "${PROJECT_ROOT}"/vendor/k8s.io/code-generator/generate-groups.sh \
   deepcopy \
   github.com/gardener/gardener-resource-manager/pkg/client \
-  github.com/gardener/gardener-resource-manager/pkg/apis \
+  github.com/gardener/gardener-resource-manager/api \
   "resources:v1alpha1" \
   --go-header-file "${PROJECT_ROOT}/vendor/github.com/gardener/gardener/hack/LICENSE_BOILERPLATE.txt"
