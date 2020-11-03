@@ -22,7 +22,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
@@ -73,18 +73,18 @@ func CheckManagedResourceHealthy(mr *v1alpha1.ManagedResource) error {
 }
 
 var (
-	trueCrdConditionTypes = []apiextensionsv1beta1.CustomResourceDefinitionConditionType{
-		apiextensionsv1beta1.NamesAccepted, apiextensionsv1beta1.Established,
+	trueCrdConditionTypes = []apiextensionsv1.CustomResourceDefinitionConditionType{
+		apiextensionsv1.NamesAccepted, apiextensionsv1.Established,
 	}
-	falseOptionalCrdConditionTypes = []apiextensionsv1beta1.CustomResourceDefinitionConditionType{
-		apiextensionsv1beta1.Terminating,
+	falseOptionalCrdConditionTypes = []apiextensionsv1.CustomResourceDefinitionConditionType{
+		apiextensionsv1.Terminating,
 	}
 )
 
 // CheckCustomResourceDefinition checks whether the given CustomResourceDefinition is healthy.
 // A CRD is considered healthy if its `NamesAccepted` and `Established` conditions are with status `True`
 // and its `Terminating` condition is missing or has status `False`.
-func CheckCustomResourceDefinition(crd *apiextensionsv1beta1.CustomResourceDefinition) error {
+func CheckCustomResourceDefinition(crd *apiextensionsv1.CustomResourceDefinition) error {
 	for _, trueConditionType := range trueCrdConditionTypes {
 		conditionType := string(trueConditionType)
 		condition := getCustomResourceDefinitionCondition(crd.Status.Conditions, trueConditionType)
@@ -288,7 +288,7 @@ func daemonSetMaxUnavailable(daemonSet *appsv1.DaemonSet) int32 {
 	return int32(maxUnavailable)
 }
 
-func getCustomResourceDefinitionCondition(conditions []apiextensionsv1beta1.CustomResourceDefinitionCondition, conditionType apiextensionsv1beta1.CustomResourceDefinitionConditionType) *apiextensionsv1beta1.CustomResourceDefinitionCondition {
+func getCustomResourceDefinitionCondition(conditions []apiextensionsv1.CustomResourceDefinitionCondition, conditionType apiextensionsv1.CustomResourceDefinitionConditionType) *apiextensionsv1.CustomResourceDefinitionCondition {
 	for _, condition := range conditions {
 		if condition.Type == conditionType {
 			return &condition

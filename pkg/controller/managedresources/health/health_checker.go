@@ -20,6 +20,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -28,9 +30,18 @@ import (
 // `nil` is returned when the `runtime.Unstructured` has kind which is not supported by this function.
 func CheckHealth(scheme *runtime.Scheme, obj runtime.Object) error {
 	switch obj.GetObjectKind().GroupVersionKind().GroupKind() {
-	case apiextensionsv1beta1.SchemeGroupVersion.WithKind("CustomResourceDefinition").GroupKind():
-		crd := &apiextensionsv1beta1.CustomResourceDefinition{}
-		if err := scheme.Convert(obj, crd, nil); err != nil {
+	case apiextensionsv1.SchemeGroupVersion.WithKind("CustomResourceDefinition").GroupKind():
+		crdObj := obj
+		if obj.GetObjectKind().GroupVersionKind().Version == apiextensionsv1beta1.SchemeGroupVersion.Version {
+			// Convert to internal version first if v1beta1 because converter cannot convert from external -> external version.
+			crd := &apiextensions.CustomResourceDefinition{}
+			if err := scheme.Convert(crdObj, crd, nil); err != nil {
+				return err
+			}
+			crdObj = crd
+		}
+		crd := &apiextensionsv1.CustomResourceDefinition{}
+		if err := scheme.Convert(crdObj, crd, nil); err != nil {
 			return err
 		}
 		return health.CheckCustomResourceDefinition(crd)
