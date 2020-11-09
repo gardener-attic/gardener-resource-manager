@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -70,6 +71,8 @@ type Reconciler struct {
 	class        *filter.ClassFilter
 	alwaysUpdate bool
 	syncPeriod   time.Duration
+
+	clusterID string
 }
 
 // InjectClient injects a client into the reconciler.
@@ -131,6 +134,7 @@ func (r *Reconciler) reconcile(ctx context.Context, mr *resourcesv1alpha1.Manage
 
 		equivalences           = NewEquivalences(mr.Spec.Equivalences...)
 		existingResourcesIndex = NewObjectIndex(mr.Status.Resources, equivalences)
+		origin                 = r.origin(mr)
 
 		forceOverwriteLabels      bool
 		forceOverwriteAnnotations bool
@@ -291,7 +295,7 @@ func (r *Reconciler) reconcile(ctx context.Context, mr *resourcesv1alpha1.Manage
 		}
 	}
 
-	if err := r.applyNewResources(ctx, newResourcesObjects, mr.Spec.InjectLabels, equivalences); err != nil {
+	if err := r.applyNewResources(ctx, origin, newResourcesObjects, mr.Spec.InjectLabels, equivalences); err != nil {
 		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, resourcesv1alpha1.ConditionApplyFailed, err.Error())
 		if err := tryUpdateManagedResourceConditions(ctx, r.client, mr, conditionResourcesApplied); err != nil {
 			return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v", err)
@@ -373,7 +377,7 @@ func (r *Reconciler) delete(ctx context.Context, mr *resourcesv1alpha1.ManagedRe
 	return ctrl.Result{}, nil
 }
 
-func (r *Reconciler) applyNewResources(ctx context.Context, newResourcesObjects []object, labelsToInject map[string]string, equivalences Equivalences) error {
+func (r *Reconciler) applyNewResources(ctx context.Context, origin string, newResourcesObjects []object, labelsToInject map[string]string, equivalences Equivalences) error {
 	var (
 		results   = make(chan error)
 		wg        sync.WaitGroup
@@ -424,7 +428,7 @@ func (r *Reconciler) applyNewResources(ctx context.Context, newResourcesObjects 
 						return fmt.Errorf("error injecting labels into object %q: %s", resource, err)
 					}
 
-					return merge(obj.obj, current, obj.forceOverwriteLabels, obj.oldInformation.Labels, obj.forceOverwriteAnnotations, obj.oldInformation.Annotations, scaledHorizontally, scaledVertically)
+					return merge(origin, obj.obj, current, obj.forceOverwriteLabels, obj.oldInformation.Labels, obj.forceOverwriteAnnotations, obj.oldInformation.Annotations, scaledHorizontally, scaledVertically)
 				}); err != nil {
 					if apierrors.IsConflict(err) {
 						r.log.Info(fmt.Sprintf("conflict during apply of object %q: %s", resource, err))
@@ -459,6 +463,26 @@ func (r *Reconciler) applyNewResources(ctx context.Context, newResourcesObjects 
 	}
 
 	return errorList.ErrorOrNil()
+}
+
+func (r *Reconciler) origin(mr *resourcesv1alpha1.ManagedResource) string {
+	if r.clusterID != "" {
+		return r.clusterID + ":" + mr.Namespace + "/" + mr.Name
+	}
+	return mr.Namespace + "/" + mr.Name
+}
+
+func MatchOrigin(origin, found string) bool {
+	if found == origin {
+		return true
+	}
+	parts := strings.Split(origin, ":")
+	if len(parts) > 1 {
+		// handle format migration for adding cluster-id later
+		fparts := strings.Split(found, ":")
+		return len(fparts) == 1 && parts[1] == found
+	}
+	return false
 }
 
 // computeAllScaledObjectKeys returns two sets containing object keys (in the form `Group/Kind/Namespace/Name`).

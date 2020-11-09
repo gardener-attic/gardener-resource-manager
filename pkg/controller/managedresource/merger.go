@@ -29,12 +29,14 @@ const (
 	descriptionAnnotation     = "resources.gardener.cloud/description"
 	descriptionAnnotationText = `DO NOT EDIT - This resource is managed by gardener-resource-manager.
 Any modifications are discarded and the resource is returned to the original state.`
+
+	originAnnotation = "resources.gardener.cloud/origin"
 )
 
 // merge merges the values of the `desired` object into the `current` object while preserving `current`'s important
 // metadata (like resourceVersion and finalizers), status and selected spec fields of the respective kind (e.g.
 // .spec.selector of a Job).
-func merge(desired, current *unstructured.Unstructured, forceOverwriteLabels bool, existingLabels map[string]string, forceOverwriteAnnotations bool, existingAnnotations map[string]string, preserveReplicas, preserveResources bool) error {
+func merge(origin string, desired, current *unstructured.Unstructured, forceOverwriteLabels bool, existingLabels map[string]string, forceOverwriteAnnotations bool, existingAnnotations map[string]string, preserveReplicas, preserveResources bool) error {
 	// save copy of current object before merging
 	oldObject := current.DeepCopy()
 
@@ -71,6 +73,7 @@ func merge(desired, current *unstructured.Unstructured, forceOverwriteLabels boo
 	}
 
 	ann[descriptionAnnotation] = descriptionAnnotationText
+	ann[originAnnotation] = origin
 	newObject.SetAnnotations(ann)
 
 	// keep status of old object if it is set and not empty

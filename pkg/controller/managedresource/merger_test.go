@@ -34,6 +34,8 @@ import (
 
 var _ = Describe("merger", func() {
 
+	origin := "test:a/b"
+
 	Describe("#merge", func() {
 		var (
 			current, desired *unstructured.Unstructured
@@ -77,9 +79,9 @@ var _ = Describe("merger", func() {
 			desired.Object["metadata"] = nil
 
 			expected := current.DeepCopy()
-			addDescriptionAnnotations(expected)
+			addAnnotations(origin, expected)
 
-			Expect(merge(desired, current, false, nil, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(merge(origin, desired, current, false, nil, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.Object["metadata"]).To(Equal(expected.Object["metadata"]))
 		})
 
@@ -90,7 +92,7 @@ var _ = Describe("merger", func() {
 
 			expected := desired.DeepCopy()
 
-			Expect(merge(desired, current, true, existingLabels, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(merge(origin, desired, current, true, existingLabels, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.GetLabels()).To(Equal(expected.GetLabels()))
 		})
 
@@ -105,7 +107,7 @@ var _ = Describe("merger", func() {
 				"other": "baz",
 			})
 
-			Expect(merge(desired, current, false, existingLabels, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(merge(origin, desired, current, false, existingLabels, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.GetLabels()).To(Equal(expected.GetLabels()))
 		})
 
@@ -119,7 +121,7 @@ var _ = Describe("merger", func() {
 				"other": "baz",
 			})
 
-			Expect(merge(desired, current, false, existingLabels, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(merge(origin, desired, current, false, existingLabels, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.GetLabels()).To(Equal(expected.GetLabels()))
 		})
 
@@ -134,7 +136,7 @@ var _ = Describe("merger", func() {
 				"other": "baz",
 			})
 
-			Expect(merge(desired, current, false, existingLabels, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(merge(origin, desired, current, false, existingLabels, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.GetLabels()).To(Equal(expected.GetLabels()))
 		})
 
@@ -144,9 +146,9 @@ var _ = Describe("merger", func() {
 			existingAnnotations := map[string]string{"existing": "ignored"}
 
 			expected := desired.DeepCopy()
-			addDescriptionAnnotations(expected)
+			addAnnotations(origin, expected)
 
-			Expect(merge(desired, current, false, nil, true, existingAnnotations, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(merge(origin, desired, current, false, nil, true, existingAnnotations, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.GetAnnotations()).To(Equal(expected.GetAnnotations()))
 		})
 
@@ -160,9 +162,9 @@ var _ = Describe("merger", func() {
 				"foo":   "bar",
 				"other": "baz",
 			})
-			addDescriptionAnnotations(expected)
+			addAnnotations(origin, expected)
 
-			Expect(merge(desired, current, false, nil, false, existingAnnotations, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(merge(origin, desired, current, false, nil, false, existingAnnotations, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.GetAnnotations()).To(Equal(expected.GetAnnotations()))
 		})
 
@@ -175,9 +177,9 @@ var _ = Describe("merger", func() {
 			expected.SetAnnotations(map[string]string{
 				"other": "baz",
 			})
-			addDescriptionAnnotations(expected)
+			addAnnotations(origin, expected)
 
-			Expect(merge(desired, current, false, nil, false, existingAnnotations, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(merge(origin, desired, current, false, nil, false, existingAnnotations, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.GetAnnotations()).To(Equal(expected.GetAnnotations()))
 		})
 
@@ -191,9 +193,9 @@ var _ = Describe("merger", func() {
 				"foo":   "changed",
 				"other": "baz",
 			})
-			addDescriptionAnnotations(expected)
+			addAnnotations(origin, expected)
 
-			Expect(merge(desired, current, false, nil, false, existingAnnotations, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(merge(origin, desired, current, false, nil, false, existingAnnotations, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.GetAnnotations()).To(Equal(expected.GetAnnotations()))
 		})
 
@@ -207,7 +209,7 @@ var _ = Describe("merger", func() {
 
 			expected := current.DeepCopy()
 
-			Expect(merge(desired, current, false, nil, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(merge(origin, desired, current, false, nil, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.Object["status"]).To(Equal(expected.Object["status"]))
 		})
 
@@ -218,7 +220,7 @@ var _ = Describe("merger", func() {
 
 			current.Object["status"] = map[string]interface{}{}
 
-			Expect(merge(desired, current, false, nil, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(merge(origin, desired, current, false, nil, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.Object["status"]).To(BeNil())
 		})
 
@@ -229,7 +231,7 @@ var _ = Describe("merger", func() {
 
 			delete(current.Object, "status")
 
-			Expect(merge(desired, current, false, nil, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
+			Expect(merge(origin, desired, current, false, nil, false, nil, false, false)).NotTo(HaveOccurred(), "merge should be successful")
 			Expect(current.Object["status"]).To(BeNil())
 		})
 
@@ -240,12 +242,12 @@ var _ = Describe("merger", func() {
 			})
 
 			It("when forceOverrideAnnotation is false", func() {
-				Expect(merge(desired, current, false, nil, false, nil, false, false)).ToNot(HaveOccurred(), "merge succeeds")
+				Expect(merge(origin, desired, current, false, nil, false, nil, false, false)).ToNot(HaveOccurred(), "merge succeeds")
 			})
 			It("when forceOverrideAnnotation is false and old annotations exist", func() {
 				desired.SetAnnotations(map[string]string{"goo": "boo"})
 				current.SetAnnotations(map[string]string{"foo": "bar"})
-				Expect(merge(desired, current, false, nil, false, nil, false, false)).ToNot(HaveOccurred(), "merge succeeds")
+				Expect(merge(origin, desired, current, false, nil, false, nil, false, false)).ToNot(HaveOccurred(), "merge succeeds")
 
 				Expect(current.GetAnnotations()).To(HaveKeyWithValue("goo", "boo"))
 				Expect(current.GetAnnotations()).To(HaveKeyWithValue("foo", "bar"))
@@ -253,7 +255,7 @@ var _ = Describe("merger", func() {
 
 			It("when forceOverrideAnnotation is true", func() {
 				desired.SetAnnotations(map[string]string{"goo": "boo"})
-				Expect(merge(desired, current, false, nil, true, nil, false, false)).ToNot(HaveOccurred(), "merge succeeds")
+				Expect(merge(origin, desired, current, false, nil, true, nil, false, false)).ToNot(HaveOccurred(), "merge succeeds")
 				Expect(current.GetAnnotations()).To(HaveKeyWithValue("goo", "boo"))
 			})
 		})
@@ -848,13 +850,13 @@ var _ = Describe("merger", func() {
 	})
 })
 
-func addDescriptionAnnotations(obj *unstructured.Unstructured) {
+func addAnnotations(origin string, obj *unstructured.Unstructured) {
 	ann := obj.GetAnnotations()
 
 	if ann == nil {
 		ann = make(map[string]string, 1)
 	}
 	ann[descriptionAnnotation] = descriptionAnnotationText
-
+	ann[originAnnotation] = origin
 	obj.SetAnnotations(ann)
 }
