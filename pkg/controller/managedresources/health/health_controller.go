@@ -25,6 +25,7 @@ import (
 	"github.com/gardener/gardener-resource-manager/pkg/controller/utils"
 
 	"github.com/go-logr/logr"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,7 +35,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-type HealthReconciler struct {
+// Reconciler performs health checks for resources managed by ManagedResources.
+type Reconciler struct {
 	ctx          context.Context
 	log          logr.Logger
 	client       client.Client
@@ -44,11 +46,13 @@ type HealthReconciler struct {
 	syncPeriod   time.Duration
 }
 
-func NewHealthReconciler(ctx context.Context, log logr.Logger, client, targetClient client.Client, targetScheme *runtime.Scheme, classFilter *managedresources.ClassFilter, syncPeriod time.Duration) *HealthReconciler {
-	return &HealthReconciler{ctx, log, client, targetClient, targetScheme, classFilter, syncPeriod}
+// NewReconciler returns a new health reconciler.
+func NewReconciler(ctx context.Context, log logr.Logger, client, targetClient client.Client, targetScheme *runtime.Scheme, classFilter *managedresources.ClassFilter, syncPeriod time.Duration) *Reconciler {
+	return &Reconciler{ctx, log, client, targetClient, targetScheme, classFilter, syncPeriod}
 }
 
-func (r *HealthReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+// Reconcile performs health checks.
+func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	log := r.log.WithValues("object", req)
 	log.Info("Starting ManagedResource health checks")
 
@@ -88,7 +92,11 @@ func (r *HealthReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{RequeueAfter: r.syncPeriod}, nil
 	}
 
-	resourcesObjectReferences := mr.Status.Resources
+	var (
+		oldConditions             = []resourcesv1alpha1.ManagedResourceCondition{conditionResourcesHealthy}
+		resourcesObjectReferences = mr.Status.Resources
+	)
+
 	for _, ref := range resourcesObjectReferences {
 		var obj runtime.Object
 		// sigs.k8s.io/controller-runtime/pkg/client.DelegatingReader does not use the cache for unstructured.Unstructured
@@ -141,8 +149,11 @@ func (r *HealthReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	conditionResourcesHealthy = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesHealthy, resourcesv1alpha1.ConditionTrue, "ResourcesHealthy", "All resources are healthy.")
-	if err := tryUpdateManagedResourceCondition(r.ctx, r.client, mr, conditionResourcesHealthy); err != nil {
-		return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v ", err)
+
+	if !apiequality.Semantic.DeepEqual(oldConditions, []resourcesv1alpha1.ManagedResourceCondition{conditionResourcesHealthy}) {
+		if err := tryUpdateManagedResourceCondition(r.ctx, r.client, mr, conditionResourcesHealthy); err != nil {
+			return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v ", err)
+		}
 	}
 
 	log.Info("Finished ManagedResource health checks")
@@ -151,8 +162,7 @@ func (r *HealthReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 func tryUpdateManagedResourceCondition(ctx context.Context, c client.Client, mr *resourcesv1alpha1.ManagedResource, condition resourcesv1alpha1.ManagedResourceCondition) error {
 	return utils.TryUpdateStatus(ctx, retry.DefaultBackoff, c, mr, func() error {
-		newConditions := resourcesv1alpha1helper.MergeConditions(mr.Status.Conditions, condition)
-		mr.Status.Conditions = newConditions
+		mr.Status.Conditions = resourcesv1alpha1helper.MergeConditions(mr.Status.Conditions, condition)
 		return nil
 	})
 }
