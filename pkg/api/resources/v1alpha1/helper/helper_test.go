@@ -19,12 +19,14 @@ import (
 	"time"
 
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
-	helper "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1/helper"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/gardener/gardener-resource-manager/api/resources/v1alpha1/helper"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega/gstruct"
+	. "github.com/onsi/gomega/types"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestHelper(t *testing.T) {
@@ -32,7 +34,85 @@ func TestHelper(t *testing.T) {
 	RunSpecs(t, "API v1alpha1 Helper Suite")
 }
 
+var zeroTime metav1.Time
+
 var _ = Describe("helper", func() {
+	DescribeTable("#UpdatedCondition",
+		func(condition resourcesv1alpha1.ManagedResourceCondition, status resourcesv1alpha1.ConditionStatus, reason, message string, matcher GomegaMatcher) {
+			updated := helper.UpdatedCondition(condition, status, reason, message)
+
+			Expect(updated).To(matcher)
+		},
+		Entry("no update",
+			resourcesv1alpha1.ManagedResourceCondition{
+				Status:  resourcesv1alpha1.ConditionTrue,
+				Reason:  "reason",
+				Message: "message",
+			},
+			resourcesv1alpha1.ConditionTrue,
+			"reason",
+			"message",
+			MatchFields(IgnoreExtras, Fields{
+				"Status":             Equal(resourcesv1alpha1.ConditionTrue),
+				"Reason":             Equal("reason"),
+				"Message":            Equal("message"),
+				"LastTransitionTime": Equal(zeroTime),
+				"LastUpdateTime":     Equal(zeroTime),
+			}),
+		),
+		Entry("update reason",
+			resourcesv1alpha1.ManagedResourceCondition{
+				Status:  resourcesv1alpha1.ConditionTrue,
+				Reason:  "reason",
+				Message: "message",
+			},
+			resourcesv1alpha1.ConditionTrue,
+			"OtherReason",
+			"message",
+			MatchFields(IgnoreExtras, Fields{
+				"Status":             Equal(resourcesv1alpha1.ConditionTrue),
+				"Reason":             Equal("OtherReason"),
+				"Message":            Equal("message"),
+				"LastTransitionTime": Equal(zeroTime),
+				"LastUpdateTime":     Not(Equal(zeroTime)),
+			}),
+		),
+		Entry("update message",
+			resourcesv1alpha1.ManagedResourceCondition{
+				Status:  resourcesv1alpha1.ConditionTrue,
+				Reason:  "reason",
+				Message: "message",
+			},
+			resourcesv1alpha1.ConditionTrue,
+			"reason",
+			"OtherMessage",
+			MatchFields(IgnoreExtras, Fields{
+				"Status":             Equal(resourcesv1alpha1.ConditionTrue),
+				"Reason":             Equal("reason"),
+				"Message":            Equal("OtherMessage"),
+				"LastTransitionTime": Equal(zeroTime),
+				"LastUpdateTime":     Not(Equal(zeroTime)),
+			}),
+		),
+		Entry("update status",
+			resourcesv1alpha1.ManagedResourceCondition{
+				Status:  resourcesv1alpha1.ConditionTrue,
+				Reason:  "reason",
+				Message: "message",
+			},
+			resourcesv1alpha1.ConditionFalse,
+			"OtherReason",
+			"message",
+			MatchFields(IgnoreExtras, Fields{
+				"Status":             Equal(resourcesv1alpha1.ConditionFalse),
+				"Reason":             Equal("OtherReason"),
+				"Message":            Equal("message"),
+				"LastTransitionTime": Not(Equal(zeroTime)),
+				"LastUpdateTime":     Not(Equal(zeroTime)),
+			}),
+		),
+	)
+
 	Describe("#MergeConditions", func() {
 		It("should merge the conditions", func() {
 			var (

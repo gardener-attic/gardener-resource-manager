@@ -279,7 +279,7 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 
 			healthController, err := controller.New("health-controller", mgr, controller.Options{
 				MaxConcurrentReconciles: healthMaxConcurrentWorkers,
-				Reconciler: health.NewHealthReconciler(
+				Reconciler: health.NewReconciler(
 					ctx,
 					log.WithName("health-reconciler"),
 					mgr.GetClient(),
