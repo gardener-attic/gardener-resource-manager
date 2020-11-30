@@ -12,20 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package managedresources_test
+package secret_test
 
 import (
 	"context"
 	"fmt"
 	"time"
-
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/pointer"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
-	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources"
-	mockclient "github.com/gardener/gardener-resource-manager/pkg/mock/controller-runtime/client"
 
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
@@ -33,10 +25,18 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/pointer"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/inject"
+
+	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
+	secretcontroller "github.com/gardener/gardener-resource-manager/pkg/controller/secret"
+	"github.com/gardener/gardener-resource-manager/pkg/filter"
+	mockclient "github.com/gardener/gardener-resource-manager/pkg/mock/controller-runtime/client"
 )
 
 var _ = Describe("SecretReconciler", func() {
@@ -44,20 +44,21 @@ var _ = Describe("SecretReconciler", func() {
 		ctrl *gomock.Controller
 		c    *mockclient.MockClient
 
-		r         *managedresources.SecretReconciler
-		filter    *managedresources.ClassFilter
-		secret    *corev1.Secret
-		secretReq reconcile.Request
+		r           *secretcontroller.Reconciler
+		classFilter *filter.ClassFilter
+		secret      *corev1.Secret
+		secretReq   reconcile.Request
 	)
 
 	BeforeEach(func() {
 		ctrl = gomock.NewController(GinkgoT())
 		c = mockclient.NewMockClient(ctrl)
 
-		filter = managedresources.NewClassFilter("seed")
-		r = managedresources.NewSecretReconciler(log.NullLogger{}, filter)
+		classFilter = filter.NewClassFilter("seed")
+		r = &secretcontroller.Reconciler{ClassFilter: classFilter}
 
 		Expect(inject.ClientInto(c, r)).To(BeTrue())
+		Expect(inject.LoggerInto(log.NullLogger{}, r)).To(BeTrue())
 
 		secret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -171,7 +172,7 @@ var _ = Describe("SecretReconciler", func() {
 		It("should do nothing if there is no MR referencing this secret", func() {
 			mrs := []resourcesv1alpha1.ManagedResource{{
 				Spec: resourcesv1alpha1.ManagedResourceSpec{
-					Class: pointer.StringPtr(filter.ResourceClass()),
+					Class: pointer.StringPtr(classFilter.ResourceClass()),
 					SecretRefs: []corev1.LocalObjectReference{{
 						Name: "foo",
 					}},
@@ -199,11 +200,11 @@ var _ = Describe("SecretReconciler", func() {
 		})
 
 		It("should do nothing if finalizer was already added", func() {
-			secret.Finalizers = []string{filter.FinalizerName()}
+			secret.Finalizers = []string{classFilter.FinalizerName()}
 
 			mrs := []resourcesv1alpha1.ManagedResource{{
 				Spec: resourcesv1alpha1.ManagedResourceSpec{
-					Class: pointer.StringPtr(filter.ResourceClass()),
+					Class: pointer.StringPtr(classFilter.ResourceClass()),
 					SecretRefs: []corev1.LocalObjectReference{{
 						Name: secret.Name,
 					}},
@@ -231,7 +232,7 @@ var _ = Describe("SecretReconciler", func() {
 		It("should add finalizer to secret if referenced by MR", func() {
 			mrs := []resourcesv1alpha1.ManagedResource{{
 				Spec: resourcesv1alpha1.ManagedResourceSpec{
-					Class: pointer.StringPtr(filter.ResourceClass()),
+					Class: pointer.StringPtr(classFilter.ResourceClass()),
 					SecretRefs: []corev1.LocalObjectReference{{
 						Name: secret.Name,
 					}},
@@ -251,7 +252,7 @@ var _ = Describe("SecretReconciler", func() {
 			c.EXPECT().Update(nil, gomock.AssignableToTypeOf(secret)).
 				DoAndReturn(func(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
 					s := obj.(*corev1.Secret)
-					Expect(s.Finalizers).To(ConsistOf(filter.FinalizerName()))
+					Expect(s.Finalizers).To(ConsistOf(classFilter.FinalizerName()))
 					return nil
 				})
 
@@ -265,7 +266,7 @@ var _ = Describe("SecretReconciler", func() {
 		It("should do nothing if finalizer was already removed", func() {
 			mrs := []resourcesv1alpha1.ManagedResource{{
 				Spec: resourcesv1alpha1.ManagedResourceSpec{
-					Class:      pointer.StringPtr(filter.ResourceClass()),
+					Class:      pointer.StringPtr(classFilter.ResourceClass()),
 					SecretRefs: []corev1.LocalObjectReference{},
 				},
 			}}
@@ -289,11 +290,11 @@ var _ = Describe("SecretReconciler", func() {
 		})
 
 		It("should remove finalizer from secret if reference was removed", func() {
-			secret.Finalizers = []string{filter.FinalizerName()}
+			secret.Finalizers = []string{classFilter.FinalizerName()}
 
 			mrs := []resourcesv1alpha1.ManagedResource{{
 				Spec: resourcesv1alpha1.ManagedResourceSpec{
-					Class:      pointer.StringPtr(filter.ResourceClass()),
+					Class:      pointer.StringPtr(classFilter.ResourceClass()),
 					SecretRefs: []corev1.LocalObjectReference{},
 				},
 			}}
@@ -323,7 +324,7 @@ var _ = Describe("SecretReconciler", func() {
 		})
 
 		It("should remove finalizer from secret if class changed", func() {
-			secret.Finalizers = []string{filter.FinalizerName()}
+			secret.Finalizers = []string{classFilter.FinalizerName()}
 
 			mrs := []resourcesv1alpha1.ManagedResource{{
 				Spec: resourcesv1alpha1.ManagedResourceSpec{
@@ -359,7 +360,7 @@ var _ = Describe("SecretReconciler", func() {
 		})
 
 		It("should requeue if secret update fails", func() {
-			secret.Finalizers = []string{filter.FinalizerName()}
+			secret.Finalizers = []string{classFilter.FinalizerName()}
 
 			mrs := []resourcesv1alpha1.ManagedResource{{
 				Spec: resourcesv1alpha1.ManagedResourceSpec{

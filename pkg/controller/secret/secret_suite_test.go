@@ -12,32 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package secret_test
 
 import (
-	"context"
-	"os"
+	"testing"
 
-	"github.com/gardener/gardener-resource-manager/cmd/gardener-resource-manager/app"
-	"github.com/gardener/gardener-resource-manager/pkg/log"
-
-	runtimelog "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
-func main() {
-	runtimelog.SetLogger(log.ZapLogger(false))
-
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		defer cancel()
-		<-signals.SetupSignalHandler()
-	}()
-
-	cmd := app.NewResourceManagerCommand()
-
-	if err := cmd.ExecuteContext(ctx); err != nil {
-		runtimelog.Log.Error(err, "error executing the main controller command")
-		os.Exit(1)
-	}
+func TestSecret(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Secret Controller Suite")
 }

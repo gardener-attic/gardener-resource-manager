@@ -1,34 +1,37 @@
-/*
- * Copyright 2019 SAP SE or an SAP affiliate company. All rights reserved. This file is licensed under the Apache Software License, v. 2 except as noted otherwise in the LICENSE file
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *       http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- *
- */
+// Copyright (c) 2020 SAP SE or an SAP affiliate company. All rights reserved. This file is licensed under the Apache Software License, v. 2 except as noted otherwise in the LICENSE file
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-package managedresources
+package filter
 
 import (
 	"strings"
 
-	"github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
-
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
 )
 
-// DefaultClass is used a resource class is no class is specified on the command line
-const DefaultClass = "resources"
+const (
+	// DefaultClass is used a resource class is no class is specified on the command line
+	DefaultClass = "resources"
+
+	// FinalizerName is the finalizer base name that is injected into ManagedResources.
+	// The concrete finalizer is finally containing this base name and the resource class.
+	FinalizerName = "resources.gardener.cloud/gardener-resource-manager"
+)
 
 // ClassFilter keeps the resource class for the actual controller instance
 // and is used as Filter predicate for events finally passed to the controller
@@ -69,7 +72,7 @@ func (f *ClassFilter) FinalizerName() string {
 
 // Responsible checks whether an object should be managed by the actual controller instance
 func (f *ClassFilter) Responsible(o runtime.Object) bool {
-	r := o.(*v1alpha1.ManagedResource)
+	r := o.(*resourcesv1alpha1.ManagedResource)
 	c := ""
 	if r.Spec.Class != nil && *r.Spec.Class != "" {
 		c = *r.Spec.Class
@@ -84,7 +87,7 @@ func (f *ClassFilter) Responsible(o runtime.Object) bool {
 func (f *ClassFilter) Active(o runtime.Object) (action bool, responsible bool) {
 	busy := false
 	responsible = f.Responsible(o)
-	r := o.(*v1alpha1.ManagedResource)
+	r := o.(*resourcesv1alpha1.ManagedResource)
 
 	for _, finalizer := range r.GetFinalizers() {
 		if strings.HasPrefix(finalizer, FinalizerName) {

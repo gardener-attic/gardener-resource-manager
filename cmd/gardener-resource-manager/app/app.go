@@ -17,91 +17,41 @@ package app
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"os"
-	"os/user"
-	"path/filepath"
 	"sync"
-	"time"
 
-	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
-	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources"
-	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources/health"
-	logpkg "github.com/gardener/gardener-resource-manager/pkg/log"
-	"github.com/gardener/gardener-resource-manager/pkg/mapper"
-	managerpredicate "github.com/gardener/gardener-resource-manager/pkg/predicate"
-
-	extensionscontroller "github.com/gardener/gardener/extensions/pkg/controller"
-	extensionspredicate "github.com/gardener/gardener/extensions/pkg/predicate"
-	hvpav1alpha1 "github.com/gardener/hvpa-controller/api/v1alpha1"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	corev1 "k8s.io/api/core/v1"
-	apiextensionsinstall "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/install"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/client-go/discovery"
-	memcache "k8s.io/client-go/discovery/cached/memory"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/restmapper"
-	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/util/workqueue"
-	apiregistrationinstall "k8s.io/kube-aggregator/pkg/apis/apiregistration/install"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	runtimelog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	resourcemanagercmd "github.com/gardener/gardener-resource-manager/pkg/cmd"
+	healthcontroller "github.com/gardener/gardener-resource-manager/pkg/controller/health"
+	resourcecontroller "github.com/gardener/gardener-resource-manager/pkg/controller/managedresource"
+	secretcontroller "github.com/gardener/gardener-resource-manager/pkg/controller/secret"
+	"github.com/gardener/gardener-resource-manager/pkg/healthz"
+	logpkg "github.com/gardener/gardener-resource-manager/pkg/log"
 )
 
 var log = runtimelog.Log.WithName("gardener-resource-manager")
 
-// NewControllerManagerCommand creates a new command for running a gardener resource manager controllers.
-func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
+// NewResourceManagerCommand creates a new command for running a gardener resource manager controllers.
+func NewResourceManagerCommand() *cobra.Command {
 	runtimelog.SetLogger(logpkg.ZapLogger(false))
 	entryLog := log.WithName("entrypoint")
 
-	var (
-		metricsBindAddress string
-		healthBindAddress  string
+	managerOpts := &resourcemanagercmd.ManagerOptions{}
+	sourceClientOpts := &resourcemanagercmd.SourceClientOptions{}
+	targetClientOpts := &resourcemanagercmd.TargetClientOptions{}
 
-		leaderElection              bool
-		leaderElectionNamespace     string
-		leaderElectionLeaseDuration time.Duration
-		leaderElectionRenewDeadline time.Duration
-		leaderElectionRetryPeriod   time.Duration
-
-		cacheResyncPeriod       time.Duration
-		targetCacheResyncPeriod time.Duration
-		syncPeriod              time.Duration
-		healthSyncPeriod        time.Duration
-
-		maxConcurrentWorkers       int
-		secretMaxConcurrentWorkers int
-		healthMaxConcurrentWorkers int
-
-		targetKubeconfigPath string
-		kubeconfigPath       string
-
-		namespace     string
-		resourceClass string
-		alwaysUpdate  bool
-	)
+	resourceControllerOpts := &resourcecontroller.ControllerOptions{}
+	secretControllerOpts := &secretcontroller.ControllerOptions{}
+	healthControllerOpts := &healthcontroller.ControllerOptions{}
 
 	cmd := &cobra.Command{
 		Use: "gardener-resource-manager",
 
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, cancel := context.WithCancel(parentCtx)
+			ctx, cancel := context.WithCancel(cmd.Context())
 			defer cancel()
 
 			entryLog.Info("Starting gardener-resource-manager...")
@@ -109,239 +59,68 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 				entryLog.Info(fmt.Sprintf("FLAG: --%s=%s", flag.Name, flag.Value))
 			})
 
-			var cfg *rest.Config
-			var err error
-			if kubeconfigPath != "" {
-				cfg, err = clientcmd.BuildConfigFromFlags("", kubeconfigPath)
-				if err != nil {
-					return fmt.Errorf("could not instantiate rest config: %+v", err)
-				}
-				entryLog.Info("using kubeconfig " + kubeconfigPath)
-			} else {
-				cfg = config.GetConfigOrDie()
-			}
-
-			mgr, err := manager.New(cfg, manager.Options{
-				LeaderElection:          leaderElection,
-				LeaderElectionID:        "gardener-resource-manager",
-				LeaderElectionNamespace: leaderElectionNamespace,
-				LeaseDuration:           &leaderElectionLeaseDuration,
-				RenewDeadline:           &leaderElectionRenewDeadline,
-				RetryPeriod:             &leaderElectionRetryPeriod,
-				SyncPeriod:              &cacheResyncPeriod,
-				Namespace:               namespace,
-				MetricsBindAddress:      metricsBindAddress,
-				HealthProbeBindAddress:  healthBindAddress,
-				LivenessEndpointName:    "/healthz",
-			})
-			if err != nil {
-				return fmt.Errorf("could not instantiate manager: %+v", err)
-			}
-
-			kubernetesClientset, err := kubernetes.NewForConfig(mgr.GetConfig())
-			if err != nil {
-				return fmt.Errorf("could not create discovery client: %+v", err)
-			}
-
-			if err := mgr.AddHealthzCheck("healthz", func(_ *http.Request) error {
-				result := kubernetesClientset.Discovery().RESTClient().Get().AbsPath("/healthz").Do(ctx)
-				if err2 := result.Error(); err2 != nil {
-					return err2
-				}
-
-				var statusCode int
-				result.StatusCode(&statusCode)
-				if statusCode != http.StatusOK {
-					return fmt.Errorf("failed talking to the seed's kube-apiserver (status code: %d)", statusCode)
-				}
-
-				return nil
-			}); err != nil {
-				return fmt.Errorf("could not add healthz check to manager: %+v", err)
-			}
-
-			utilruntime.Must(resourcesv1alpha1.AddToScheme(mgr.GetScheme()))
-
-			targetScheme := runtime.NewScheme()
-			utilruntime.Must(scheme.AddToScheme(targetScheme)) // add most of the standard k8s APIs
-			apiextensionsinstall.Install(targetScheme)
-			apiregistrationinstall.Install(targetScheme)
-			utilruntime.Must(hvpav1alpha1.AddToScheme(targetScheme))
-
-			targetConfig, err := getTargetConfig(targetKubeconfigPath)
-			if err != nil {
-				return fmt.Errorf("unable to create REST config for target cluster: %+v", err)
-			}
-
-			targetRESTMapper, err := getTargetRESTMapper(targetConfig)
-			if err != nil {
-				return fmt.Errorf("unable to create REST mapper for target cluster: %+v", err)
-			}
-
-			targetCache, err := getTargetCache(targetConfig, cache.Options{
-				Mapper: targetRESTMapper,
-				Resync: &targetCacheResyncPeriod,
-				Scheme: targetScheme,
-			})
-			if err != nil {
-				return fmt.Errorf("unable to create client cache for target cluster: %+v", err)
-			}
-
-			targetClient, err := getTargetClient(targetCache, *targetConfig, client.Options{
-				Mapper: targetRESTMapper,
-				Scheme: targetScheme,
-			})
-			if err != nil {
-				return fmt.Errorf("unable to create client for target cluster: %+v", err)
-			}
-
-			if resourceClass == "" {
-				resourceClass = managedresources.DefaultClass
-			}
-			filter := managedresources.NewClassFilter(resourceClass)
-
-			entryLog.Info("Managed namespace: " + namespace)
-			entryLog.Info("Resource class: " + filter.ResourceClass())
-			entryLog.Info("Cache resync period " + cacheResyncPeriod.String())
-
-			c, err := controller.New("resource-controller", mgr, controller.Options{
-				MaxConcurrentReconciles: maxConcurrentWorkers,
-				Reconciler: extensionscontroller.OperationAnnotationWrapper(
-					&resourcesv1alpha1.ManagedResource{},
-					managedresources.NewReconciler(
-						ctx,
-						log.WithName("reconciler"),
-						mgr.GetClient(),
-						targetClient,
-						targetRESTMapper,
-						targetScheme,
-						filter,
-						alwaysUpdate,
-						syncPeriod,
-					),
-				),
-			})
-			if err != nil {
-				return fmt.Errorf("unable to set up individual controller: %+v", err)
-			}
-
-			if err := c.Watch(
-				&source.Kind{Type: &resourcesv1alpha1.ManagedResource{}},
-				&handler.EnqueueRequestForObject{},
-				filter, predicate.Or(
-					predicate.GenerationChangedPredicate{},
-					extensionspredicate.HasOperationAnnotation(),
-					managerpredicate.ConditionStatusChanged(resourcesv1alpha1.ResourcesHealthy, managerpredicate.ConditionChangedToUnhealthy),
-				),
+			if err := resourcemanagercmd.CompleteAll(
+				managerOpts,
+				sourceClientOpts,
+				targetClientOpts,
+				resourceControllerOpts,
+				secretControllerOpts,
+				healthControllerOpts,
 			); err != nil {
-				return fmt.Errorf("unable to watch ManagedResources: %+v", err)
-			}
-			if err := c.Watch(
-				&source.Kind{Type: &corev1.Secret{}},
-				&handler.EnqueueRequestsFromMapFunc{ToRequests: mapper.SecretToManagedResourceMapper(filter)},
-			); err != nil {
-				return fmt.Errorf("unable to watch Secrets mapping to ManagedResources: %+v", err)
+				return err
 			}
 
-			entryLog.Info("Managed resource controller", "syncPeriod", syncPeriod.String())
-			entryLog.Info("Managed resource controller", "maxConcurrentWorkers", maxConcurrentWorkers)
+			var managerOptions manager.Options
+			healthz.DefaultAddOptions.Ctx = ctx
 
-			secretController, err := controller.New("secret-controller", mgr, controller.Options{
-				MaxConcurrentReconciles: secretMaxConcurrentWorkers,
-				Reconciler: managedresources.NewSecretReconciler(
-					log.WithName("secret-reconciler"),
-					filter,
-				),
-			})
+			managerOpts.Completed().Apply(&managerOptions)
+			sourceClientOpts.Completed().ApplyManagerOptions(&managerOptions)
+			sourceClientOpts.Completed().ApplyClientSet(&healthz.DefaultAddOptions.ClientSet)
+			targetClientOpts.Completed().Apply(&resourceControllerOpts.Completed().TargetClientConfig)
+			targetClientOpts.Completed().Apply(&healthControllerOpts.Completed().TargetClientConfig)
+			resourceControllerOpts.Completed().ApplyClassFilter(&secretControllerOpts.Completed().ClassFilter)
+			resourceControllerOpts.Completed().ApplyClassFilter(&healthControllerOpts.Completed().ClassFilter)
+
+			// setup manager
+			mgr, err := manager.New(sourceClientOpts.Completed().RESTConfig, managerOptions)
 			if err != nil {
-				return fmt.Errorf("unable to set up secret controller: %+v", err)
+				return fmt.Errorf("could not instantiate manager: %w", err)
 			}
 
-			if err := secretController.Watch(
-				&source.Kind{Type: &resourcesv1alpha1.ManagedResource{}},
-				&handler.EnqueueRequestsFromMapFunc{ToRequests: mapper.ManagedResourceToSecretsMapper()},
-				predicate.GenerationChangedPredicate{},
+			// add controllers and health endpoint to manager
+			if err := resourcemanagercmd.AddAllToManager(
+				mgr,
+				resourcecontroller.AddToManager,
+				secretcontroller.AddToManager,
+				healthcontroller.AddToManager,
+				healthz.AddToManager,
 			); err != nil {
-				return fmt.Errorf("unable to watch ManagedResources: %+v", err)
+				return err
 			}
 
-			// Also watch secrets to ensure, that we properly remove the finalizer in case we missed an important
-			// update event for a ManagedResource during downtime.
-			if err := secretController.Watch(
-				&source.Kind{Type: &corev1.Secret{}},
-				&handler.EnqueueRequestForObject{},
-				// Only requeue secrets from create/update events with the controller's finalizer to not flood the controller
-				// with too many unnecessary requests for all secrets in cluster/namespace.
-				managerpredicate.HasFinalizer(filter.FinalizerName()),
-			); err != nil {
-				return fmt.Errorf("unable to watch Secrets: %+v", err)
-			}
-
-			healthController, err := controller.New("health-controller", mgr, controller.Options{
-				MaxConcurrentReconciles: healthMaxConcurrentWorkers,
-				Reconciler: health.NewReconciler(
-					ctx,
-					log.WithName("health-reconciler"),
-					mgr.GetClient(),
-					targetClient,
-					targetScheme,
-					filter,
-					healthSyncPeriod,
-				),
-			})
-			if err != nil {
-				return fmt.Errorf("unable to set up individual controller: %+v", err)
-			}
-
-			if err := healthController.Watch(
-				&source.Kind{Type: &resourcesv1alpha1.ManagedResource{}},
-				&handler.Funcs{
-					CreateFunc: func(e event.CreateEvent, q workqueue.RateLimitingInterface) {
-						q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
-							Name:      e.Meta.GetName(),
-							Namespace: e.Meta.GetNamespace(),
-						}})
-					},
-					UpdateFunc: func(e event.UpdateEvent, q workqueue.RateLimitingInterface) {
-						q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
-							Name:      e.MetaNew.GetName(),
-							Namespace: e.MetaNew.GetNamespace(),
-						}})
-					},
-				},
-				filter, predicate.Or(
-					managerpredicate.ClassChangedPredicate(),
-					// start health checks immediately after MR has been reconciled
-					managerpredicate.ConditionStatusChanged(resourcesv1alpha1.ResourcesApplied, managerpredicate.DefaultConditionChange),
-				),
-			); err != nil {
-				return fmt.Errorf("unable to watch ManagedResources: %+v", err)
-			}
-
-			entryLog.Info("Managed resource health controller", "syncPeriod", healthSyncPeriod.String())
-			entryLog.Info("Managed resource health controller", "maxConcurrentWorkers", healthMaxConcurrentWorkers)
-
+			// start the target cache and exit if there was an error
 			var wg sync.WaitGroup
 			errChan := make(chan error)
 
-			// start the target cache and exit if there was an error
 			go func() {
 				defer wg.Done()
 
 				wg.Add(1)
-				if err := targetCache.Start(ctx.Done()); err != nil {
-					errChan <- fmt.Errorf("error syncing target cache: %+v", err)
+				if err := targetClientOpts.Completed().Start(ctx.Done()); err != nil {
+					errChan <- fmt.Errorf("error syncing target cache: %w", err)
 				}
 			}()
 
-			targetCache.WaitForCacheSync(ctx.Done())
+			if !targetClientOpts.Completed().WaitForCacheSync(ctx.Done()) {
+				return fmt.Errorf("timed out waiting for target cache to sync")
+			}
 
 			go func() {
 				defer wg.Done()
 
 				wg.Add(1)
 				if err := mgr.Start(ctx.Done()); err != nil {
-					errChan <- fmt.Errorf("error running manager: %+v", err)
+					errChan <- fmt.Errorf("error running manager: %w", err)
 				}
 			}()
 
@@ -351,83 +130,23 @@ func NewControllerManagerCommand(parentCtx context.Context) *cobra.Command {
 				wg.Wait()
 				return err
 
-			case <-parentCtx.Done():
-				wg.Wait()
+			case <-cmd.Context().Done():
 				entryLog.Info("Stop signal received, shutting down.")
+				wg.Wait()
 				return nil
 			}
 		},
 	}
 
-	cmd.Flags().BoolVar(&leaderElection, "leader-election", true, "enable or disable leader election")
-	cmd.Flags().StringVar(&leaderElectionNamespace, "leader-election-namespace", "", "namespace for leader election")
-	cmd.Flags().DurationVar(&leaderElectionLeaseDuration, "leader-election-lease-duration", 15*time.Second, "lease duration for leader election")
-	cmd.Flags().DurationVar(&leaderElectionRenewDeadline, "leader-election-renew-deadline", 10*time.Second, "renew deadline for leader election")
-	cmd.Flags().DurationVar(&leaderElectionRetryPeriod, "leader-election-retry-period", 2*time.Second, "retry period for leader election")
-	cmd.Flags().DurationVar(&cacheResyncPeriod, "cache-resync-period", 24*time.Hour, "duration how often the controller's cache is resynced")
-	cmd.Flags().DurationVar(&syncPeriod, "sync-period", time.Minute, "duration how often existing resources should be synced")
-	cmd.Flags().DurationVar(&targetCacheResyncPeriod, "target-cache-resync-period", 24*time.Hour, "duration how often the controller's cache for the target cluster is resynced")
-	cmd.Flags().IntVar(&maxConcurrentWorkers, "max-concurrent-workers", 10, "number of worker threads for concurrent reconciliation of resources")
-	cmd.Flags().IntVar(&secretMaxConcurrentWorkers, "secret-max-concurrent-workers", 5, "number of worker threads for concurrent secret reconciliation of resources")
-	cmd.Flags().DurationVar(&healthSyncPeriod, "health-sync-period", time.Minute, "duration how often the health of existing resources should be synced")
-	cmd.Flags().IntVar(&healthMaxConcurrentWorkers, "health-max-concurrent-workers", 10, "number of worker threads for concurrent health reconciliation of resources")
-	cmd.Flags().StringVar(&kubeconfigPath, "kubeconfig", "", "path to the kubeconfig for the source cluster")
-	cmd.Flags().StringVar(&targetKubeconfigPath, "target-kubeconfig", "", "path to the kubeconfig for the target cluster")
-	cmd.Flags().StringVar(&namespace, "namespace", "", "namespace in which the ManagedResources should be observed (defaults to all namespaces)")
-	cmd.Flags().StringVar(&resourceClass, "resource-class", managedresources.DefaultClass, "resource class used to filter resource resources")
-	cmd.Flags().BoolVar(&alwaysUpdate, "always-update", false, "if set to false then a resource will only be updated if its desired state differs from the actual state. otherwise, an update request will be always sent.")
-	cmd.Flags().StringVar(&metricsBindAddress, "metrics-bind-address", ":8080", "bind address for the metrics server")
-	cmd.Flags().StringVar(&healthBindAddress, "health-bind-address", ":8081", "bind address for the health server")
+	resourcemanagercmd.AddAllFlags(
+		cmd.Flags(),
+		managerOpts,
+		targetClientOpts,
+		sourceClientOpts,
+		resourceControllerOpts,
+		secretControllerOpts,
+		healthControllerOpts,
+	)
 
 	return cmd
-}
-
-func getTargetRESTMapper(config *rest.Config) (*restmapper.DeferredDiscoveryRESTMapper, error) {
-	targetDiscoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
-	if err != nil {
-		return nil, err
-	}
-	return restmapper.NewDeferredDiscoveryRESTMapper(memcache.NewMemCacheClient(targetDiscoveryClient)), nil
-}
-
-func getTargetConfig(kubeconfigPath string) (*rest.Config, error) {
-	if len(kubeconfigPath) > 0 {
-		return clientcmd.BuildConfigFromFlags("", kubeconfigPath)
-	}
-	if kubeconfig := os.Getenv("KUBECONFIG"); len(kubeconfig) > 0 {
-		return clientcmd.BuildConfigFromFlags("", kubeconfig)
-	}
-	if c, err := rest.InClusterConfig(); err == nil {
-		return c, nil
-	}
-	if usr, err := user.Current(); err == nil {
-		if c, err := clientcmd.BuildConfigFromFlags("", filepath.Join(usr.HomeDir, ".kube", "config")); err == nil {
-			return c, nil
-		}
-	}
-	return nil, fmt.Errorf("could not create config for cluster")
-}
-
-func getTargetCache(config *rest.Config, options cache.Options) (cache.Cache, error) {
-	return cache.New(config, options)
-}
-
-func getTargetClient(cache cache.Cache, config rest.Config, options client.Options) (client.Client, error) {
-	config.QPS = 100.0
-	config.Burst = 130
-
-	// Create the Client for Write operations.
-	c, err := client.New(&config, options)
-	if err != nil {
-		return nil, err
-	}
-
-	return &client.DelegatingClient{
-		Reader: &client.DelegatingReader{
-			CacheReader:  cache,
-			ClientReader: c,
-		},
-		Writer:       c,
-		StatusClient: c,
-	}, nil
 }

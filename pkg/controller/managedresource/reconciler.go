@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package managedresources
+package managedresource
 
 import (
 	"bytes"
@@ -27,6 +27,7 @@ import (
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
 	resourcesv1alpha1helper "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1/helper"
 	"github.com/gardener/gardener-resource-manager/pkg/controller/utils"
+	"github.com/gardener/gardener-resource-manager/pkg/filter"
 
 	hvpav1alpha1 "github.com/gardener/hvpa-controller/api/v1alpha1"
 	"github.com/go-logr/logr"
@@ -53,12 +54,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-const (
-	// FinalizerName is the finalizer base name that is injected into ManagedResources.
-	// The concrete finalizer is finally containing this base name and the resource class.
-	FinalizerName = "resources.gardener.cloud/gardener-resource-manager"
-)
-
 var (
 	deletePropagationForeground = metav1.DeletePropagationForeground
 	foregroundDeletionAPIGroups = sets.NewString(appsv1.GroupName, extensionsv1beta1.GroupName, batchv1.GroupName)
@@ -74,14 +69,27 @@ type Reconciler struct {
 	targetRESTMapper *restmapper.DeferredDiscoveryRESTMapper
 	targetScheme     *runtime.Scheme
 
-	class        *ClassFilter
+	class        *filter.ClassFilter
 	alwaysUpdate bool
 	syncPeriod   time.Duration
 }
 
-// NewReconciler creates a new reconciler with the given target client.
-func NewReconciler(ctx context.Context, log logr.Logger, c, targetClient client.Client, targetRESTMapper *restmapper.DeferredDiscoveryRESTMapper, targetScheme *runtime.Scheme, class *ClassFilter, alwaysUpdate bool, syncPeriod time.Duration) *Reconciler {
-	return &Reconciler{ctx, log, c, targetClient, targetRESTMapper, targetScheme, class, alwaysUpdate, syncPeriod}
+// InjectClient injects a client into the reconciler.
+func (r *Reconciler) InjectClient(c client.Client) error {
+	r.client = c
+	return nil
+}
+
+// InjectStopChannel injects a stop channel into the reconciler.
+func (r *Reconciler) InjectStopChannel(stopCh <-chan struct{}) error {
+	r.ctx = utils.ContextFromStopChannel(stopCh)
+	return nil
+}
+
+// InjectLogger injects a logger into the reconciler.
+func (r *Reconciler) InjectLogger(l logr.Logger) error {
+	r.log = l.WithName(ControllerName)
+	return nil
 }
 
 // Reconcile implements `reconcile.Reconciler`.

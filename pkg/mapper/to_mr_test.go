@@ -19,7 +19,7 @@ import (
 	"fmt"
 
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
-	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources"
+	filter2 "github.com/gardener/gardener-resource-manager/pkg/filter"
 	"github.com/gardener/gardener-resource-manager/pkg/mapper"
 	mockclient "github.com/gardener/gardener-resource-manager/pkg/mock/controller-runtime/client"
 
@@ -43,7 +43,7 @@ var _ = Describe("#SecretToManagedResourceMapper", func() {
 		ctrl   *gomock.Controller
 		m      handler.Mapper
 		secret *corev1.Secret
-		filter *managedresources.ClassFilter
+		filter *filter2.ClassFilter
 	)
 
 	BeforeEach(func() {
@@ -57,7 +57,7 @@ var _ = Describe("#SecretToManagedResourceMapper", func() {
 			},
 		}
 
-		filter = managedresources.NewClassFilter("seed")
+		filter = filter2.NewClassFilter("seed")
 
 		m = mapper.SecretToManagedResourceMapper(filter)
 
