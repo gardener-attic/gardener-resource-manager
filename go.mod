@@ -14,6 +14,7 @@ require (
 	github.com/spf13/cobra v0.0.6
 	github.com/spf13/pflag v1.0.5
 	go.uber.org/zap v1.13.0
+	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 	k8s.io/api v0.18.10
 	k8s.io/apiextensions-apiserver v0.18.10
 	k8s.io/apimachinery v0.18.10
@@ -29,4 +30,5 @@ require (
 replace (
 	github.com/gardener/gardener-resource-manager/api => ./api
 	k8s.io/client-go => k8s.io/client-go v0.18.10
+	sigs.k8s.io/controller-runtime => github.com/gardener/controller-runtime v0.6.3-gardener.1
 )

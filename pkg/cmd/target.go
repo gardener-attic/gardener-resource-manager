@@ -23,18 +23,18 @@ import (
 
 	hvpav1alpha1 "github.com/gardener/hvpa-controller/api/v1alpha1"
 	"github.com/spf13/pflag"
+	"golang.org/x/time/rate"
 	apiextensionsinstall "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/install"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/client-go/discovery"
-	memcache "k8s.io/client-go/discovery/cached/memory"
 	kubernetesscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
 	apiregistrationinstall "k8s.io/kube-aggregator/pkg/apis/apiregistration/install"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
 
 var _ Option = &TargetClientOptions{}
@@ -53,7 +53,7 @@ type TargetClientOptions struct {
 // and has been populated successfully.
 type TargetClientConfig struct {
 	Client     client.Client
-	RESTMapper *restmapper.DeferredDiscoveryRESTMapper
+	RESTMapper meta.RESTMapper
 	Scheme     *runtime.Scheme
 
 	cache cache.Cache
@@ -140,12 +140,14 @@ func getTargetScheme() *runtime.Scheme {
 	return scheme
 }
 
-func getTargetRESTMapper(config *rest.Config) (*restmapper.DeferredDiscoveryRESTMapper, error) {
-	targetDiscoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
-	if err != nil {
-		return nil, err
-	}
-	return restmapper.NewDeferredDiscoveryRESTMapper(memcache.NewMemCacheClient(targetDiscoveryClient)), nil
+func getTargetRESTMapper(config *rest.Config) (meta.RESTMapper, error) {
+	// use dynamic rest mapper for target cluster, which will automatically rediscover resources on NoMatchErrors
+	// but is rate-limited to not issue to many discovery calls (rate-limit shared across all reconciliations)
+	return apiutil.NewDynamicRESTMapper(
+		config,
+		apiutil.WithLazyDiscovery,
+		apiutil.WithLimiter(rate.NewLimiter(rate.Every(10*time.Second), 1)), // rediscover at maximum every 10s
+	)
 }
 
 func getTargetRESTConfig(kubeconfigPath string) (*rest.Config, error) {

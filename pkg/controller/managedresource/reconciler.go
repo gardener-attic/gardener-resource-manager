@@ -46,7 +46,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -66,7 +65,7 @@ type Reconciler struct {
 
 	client           client.Client
 	targetClient     client.Client
-	targetRESTMapper *restmapper.DeferredDiscoveryRESTMapper
+	targetRESTMapper meta.RESTMapper
 	targetScheme     *runtime.Scheme
 
 	class        *filter.ClassFilter
@@ -196,7 +195,7 @@ func (r *Reconciler) reconcile(mr *resourcesv1alpha1.ManagedResource, log logr.L
 				// look up scope of objects' kind to check, if we should default the namespace field
 				mapping, err := r.targetRESTMapper.RESTMapping(obj.GroupVersionKind().GroupKind(), obj.GroupVersionKind().Version)
 				if err != nil || mapping == nil {
-					// Don't reset RESTMapper in case of cache misses. Most probably indicates, that the corresponding CRD is not yet applied.
+					// Cache miss most probably indicates, that the corresponding CRD is not yet applied.
 					// CRD might be applied later as part of the ManagedResource reconciliation
 					log.Info(fmt.Sprintf("could not get rest mapping for %s '%s/%s': %v", obj.GetKind(), obj.GetNamespace(), obj.GetName(), err),
 						"secret", fmt.Sprintf("%s/%s", secret.Namespace, secret.Name), "secretKey", key, "objectIndexInFile", i)
@@ -385,7 +384,6 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 		errorList = &multierror.Error{
 			ErrorFormat: utils.NewErrorFormatFuncWithPrefix("Could not apply all new resources"),
 		}
-		encounteredNoMatchError = false
 	)
 
 	// get all HPA and HVPA targetRefs to check if we should prevent overwriting replicas and/or resource requirements.
@@ -432,10 +430,6 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 
 					return merge(obj.obj, current, obj.forceOverwriteLabels, obj.oldInformation.Labels, obj.forceOverwriteAnnotations, obj.oldInformation.Annotations, scaledHorizontally, scaledVertically)
 				}); err != nil {
-					if meta.IsNoMatchError(err) {
-						encounteredNoMatchError = true
-					}
-
 					if apierrors.IsConflict(err) {
 						r.log.Info(fmt.Sprintf("conflict during apply of object %q: %s", resource, err))
 						// return conflict error directly, so that the update will be retried
@@ -466,13 +460,6 @@ func (r *Reconciler) applyNewResources(newResourcesObjects []object, labelsToInj
 		if err != nil {
 			errorList = multierror.Append(errorList, err)
 		}
-	}
-
-	if encounteredNoMatchError {
-		// Reset RESTMapper in case of cache misses (e.g. CRD not found),
-		// but only reset once per reconcile, MR may contain multiple CRs of CRDs, that don't exist yet
-		// and we don't want to issue too many discovery requests, that would anyways probably still not contain the CRD
-		r.targetRESTMapper.Reset()
 	}
 
 	return errorList.ErrorOrNil()
