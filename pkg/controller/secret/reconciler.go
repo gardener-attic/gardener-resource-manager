@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package managedresources
+package secret
 
 import (
 	"context"
@@ -21,6 +21,7 @@ import (
 
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
 	"github.com/gardener/gardener-resource-manager/pkg/controller/utils"
+	"github.com/gardener/gardener-resource-manager/pkg/filter"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -31,36 +32,35 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// SecretSecretReconciler adds/removes finalizers to/from secrets referenced by ManagedResources.
-type SecretReconciler struct {
-	log    logr.Logger
-	class  *ClassFilter
-	client client.Client
+// Reconciler adds/removes finalizers to/from secrets referenced by ManagedResources.
+type Reconciler struct {
 	ctx    context.Context
+	log    logr.Logger
+	client client.Client
+
+	ClassFilter *filter.ClassFilter
 }
 
 // InjectClient injects a client into the reconciler.
-func (r *SecretReconciler) InjectClient(client client.Client) error {
+func (r *Reconciler) InjectClient(client client.Client) error {
 	r.client = client
 	return nil
 }
 
 // InjectStopChannel injects a stop channel into the reconciler.
-func (r *SecretReconciler) InjectStopChannel(stopCh <-chan struct{}) error {
+func (r *Reconciler) InjectStopChannel(stopCh <-chan struct{}) error {
 	r.ctx = utils.ContextFromStopChannel(stopCh)
 	return nil
 }
 
-// NewSecretReconciler creates a new secret reconciler.
-func NewSecretReconciler(log logr.Logger, class *ClassFilter) *SecretReconciler {
-	return &SecretReconciler{
-		log:   log,
-		class: class,
-	}
+// InjectLogger injects a logger into the reconciler.
+func (r *Reconciler) InjectLogger(l logr.Logger) error {
+	r.log = l.WithName(ControllerName)
+	return nil
 }
 
-// Reconcile implements `reconcile.SecretReconciler`.
-func (r *SecretReconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) {
+// Reconcile implements reconcile.Reconciler.
+func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) {
 	log := r.log.WithValues("secret", req)
 
 	secret := &corev1.Secret{}
@@ -82,14 +82,14 @@ func (r *SecretReconciler) Reconcile(req reconcile.Request) (reconcile.Result, e
 	for _, resource := range resourceList.Items {
 		for _, ref := range resource.Spec.SecretRefs {
 			// check if we are responsible for this MR, class might have changed, then we need to remove our finalizer
-			if ref.Name == secret.Name && r.class.Responsible(&resource) {
+			if ref.Name == secret.Name && r.ClassFilter.Responsible(&resource) {
 				secretIsReferenced = true
 				break
 			}
 		}
 	}
 
-	controllerFinalizer := r.class.FinalizerName()
+	controllerFinalizer := r.ClassFilter.FinalizerName()
 	secretFinalizers := sets.NewString(secret.Finalizers...)
 	addFinalizer, removeFinalizer := false, false
 	if secretIsReferenced && !secretFinalizers.Has(controllerFinalizer) {

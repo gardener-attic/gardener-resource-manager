@@ -15,7 +15,7 @@
 package predicate_test
 
 import (
-	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources"
+	"github.com/gardener/gardener-resource-manager/pkg/filter"
 	managerpredicate "github.com/gardener/gardener-resource-manager/pkg/predicate"
 
 	. "github.com/onsi/ginkgo"
@@ -34,7 +34,7 @@ var _ = Describe("#HasFinalizer", func() {
 	)
 
 	BeforeEach(func() {
-		finalizer = managedresources.NewClassFilter("foo").FinalizerName()
+		finalizer = filter.NewClassFilter("foo").FinalizerName()
 		predicate = managerpredicate.HasFinalizer(finalizer)
 
 		secret = &corev1.Secret{

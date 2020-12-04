@@ -21,8 +21,8 @@ import (
 
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
 	resourcesv1alpha1helper "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1/helper"
-	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources"
 	"github.com/gardener/gardener-resource-manager/pkg/controller/utils"
+	"github.com/gardener/gardener-resource-manager/pkg/filter"
 
 	"github.com/go-logr/logr"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
@@ -42,13 +42,26 @@ type Reconciler struct {
 	client       client.Client
 	targetClient client.Client
 	targetScheme *runtime.Scheme
-	classFilter  *managedresources.ClassFilter
+	classFilter  *filter.ClassFilter
 	syncPeriod   time.Duration
 }
 
-// NewReconciler returns a new health reconciler.
-func NewReconciler(ctx context.Context, log logr.Logger, client, targetClient client.Client, targetScheme *runtime.Scheme, classFilter *managedresources.ClassFilter, syncPeriod time.Duration) *Reconciler {
-	return &Reconciler{ctx, log, client, targetClient, targetScheme, classFilter, syncPeriod}
+// InjectClient injects a client into the reconciler.
+func (r *Reconciler) InjectClient(c client.Client) error {
+	r.client = c
+	return nil
+}
+
+// InjectStopChannel injects a stop channel into the reconciler.
+func (r *Reconciler) InjectStopChannel(stopCh <-chan struct{}) error {
+	r.ctx = utils.ContextFromStopChannel(stopCh)
+	return nil
+}
+
+// InjectLogger injects a logger into the reconciler.
+func (r *Reconciler) InjectLogger(l logr.Logger) error {
+	r.log = l.WithName(ControllerName)
+	return nil
 }
 
 // Reconcile performs health checks.

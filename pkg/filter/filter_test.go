@@ -15,61 +15,60 @@
  *
  */
 
-package managedresources_test
+package filter_test
 
 import (
 	"fmt"
 
-	"github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
-	"github.com/gardener/gardener-resource-manager/pkg/controller/managedresources"
-	"sigs.k8s.io/controller-runtime/pkg/event"
-
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 
-	. "github.com/onsi/ginkgo/extensions/table"
+	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
+	"github.com/gardener/gardener-resource-manager/pkg/filter"
 )
 
 var _ = Describe("ClassFilter", func() {
 	var (
 		classOld     *string = nil
-		finalizerOld         = managedresources.FinalizerName
+		finalizerOld         = filter.FinalizerName
 
 		classNew     = "new"
-		finalizerNew = fmt.Sprintf("%s-%s", managedresources.FinalizerName, classNew)
+		finalizerNew = fmt.Sprintf("%s-%s", filter.FinalizerName, classNew)
 
-		mrOldClass = &v1alpha1.ManagedResource{
+		mrOldClass = &resourcesv1alpha1.ManagedResource{
 			ObjectMeta: metav1.ObjectMeta{
 				Finalizers: []string{finalizerOld},
 			},
-			Spec: v1alpha1.ManagedResourceSpec{
+			Spec: resourcesv1alpha1.ManagedResourceSpec{
 				Class: classOld,
 			},
 		}
 
-		mrNewClassOldFinalizer = &v1alpha1.ManagedResource{
+		mrNewClassOldFinalizer = &resourcesv1alpha1.ManagedResource{
 			ObjectMeta: metav1.ObjectMeta{
 				Finalizers: []string{finalizerOld},
 			},
-			Spec: v1alpha1.ManagedResourceSpec{
+			Spec: resourcesv1alpha1.ManagedResourceSpec{
 				Class: &classNew,
 			},
 		}
 
-		mrNewClass = &v1alpha1.ManagedResource{
+		mrNewClass = &resourcesv1alpha1.ManagedResource{
 			ObjectMeta: metav1.ObjectMeta{
 				Finalizers: []string{finalizerNew},
 			},
-			Spec: v1alpha1.ManagedResourceSpec{
+			Spec: resourcesv1alpha1.ManagedResourceSpec{
 				Class: &classNew,
 			},
 		}
 	)
 
 	DescribeTable("Active",
-		func(mr *v1alpha1.ManagedResource, class string, action, responsible bool) {
-			filter := managedresources.NewClassFilter(class)
+		func(mr *resourcesv1alpha1.ManagedResource, class string, action, responsible bool) {
+			filter := filter.NewClassFilter(class)
 
 			act, resp := filter.Active(mr)
 			Expect(act).To(Equal(action))
@@ -82,8 +81,8 @@ var _ = Describe("ClassFilter", func() {
 	)
 
 	DescribeTable("Generic",
-		func(mr *v1alpha1.ManagedResource, class string, expectation bool) {
-			filter := managedresources.NewClassFilter(class)
+		func(mr *resourcesv1alpha1.ManagedResource, class string, expectation bool) {
+			filter := filter.NewClassFilter(class)
 
 			result := filter.Generic(event.GenericEvent{
 				Object: mr,
@@ -97,8 +96,8 @@ var _ = Describe("ClassFilter", func() {
 	)
 
 	DescribeTable("Create",
-		func(mr *v1alpha1.ManagedResource, class string, expectation bool) {
-			filter := managedresources.NewClassFilter(class)
+		func(mr *resourcesv1alpha1.ManagedResource, class string, expectation bool) {
+			filter := filter.NewClassFilter(class)
 
 			result := filter.Create(event.CreateEvent{
 				Object: mr,
@@ -112,8 +111,8 @@ var _ = Describe("ClassFilter", func() {
 	)
 
 	DescribeTable("Delete",
-		func(mr *v1alpha1.ManagedResource, class string, expectation bool) {
-			filter := managedresources.NewClassFilter(class)
+		func(mr *resourcesv1alpha1.ManagedResource, class string, expectation bool) {
+			filter := filter.NewClassFilter(class)
 
 			result := filter.Delete(event.DeleteEvent{
 				Object: mr,
@@ -127,8 +126,8 @@ var _ = Describe("ClassFilter", func() {
 	)
 
 	DescribeTable("Update",
-		func(mr *v1alpha1.ManagedResource, class string, expectation bool) {
-			filter := managedresources.NewClassFilter(class)
+		func(mr *resourcesv1alpha1.ManagedResource, class string, expectation bool) {
+			filter := filter.NewClassFilter(class)
 
 			result := filter.Update(event.UpdateEvent{
 				ObjectNew: mr,
