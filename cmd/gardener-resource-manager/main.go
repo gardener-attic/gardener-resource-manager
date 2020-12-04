@@ -16,28 +16,28 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
-
-	"github.com/gardener/gardener-resource-manager/cmd/gardener-resource-manager/app"
-	"github.com/gardener/gardener-resource-manager/pkg/log"
 
 	runtimelog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+
+	"github.com/gardener/gardener-resource-manager/cmd/gardener-resource-manager/app"
 )
 
 func main() {
-	runtimelog.SetLogger(log.ZapLogger(false))
-
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		defer cancel()
 		<-signals.SetupSignalHandler()
 	}()
 
-	cmd := app.NewResourceManagerCommand()
-
-	if err := cmd.ExecuteContext(ctx); err != nil {
-		runtimelog.Log.Error(err, "error executing the main controller command")
+	if err := app.NewResourceManagerCommand().ExecuteContext(ctx); err != nil {
+		if log := runtimelog.Log; log.Enabled() {
+			log.Error(err, "error running gardener-resource-manager")
+		} else {
+			fmt.Printf("error running gardener-resource-manager: %v", err)
+		}
 		os.Exit(1)
 	}
 }

@@ -66,7 +66,7 @@ func (r *Reconciler) InjectLogger(l logr.Logger) error {
 
 // Reconcile performs health checks.
 func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	log := r.log.WithValues("object", req)
+	log := r.log.WithValues("managedresource", req)
 	log.Info("Starting ManagedResource health checks")
 
 	mr := &resourcesv1alpha1.ManagedResource{}
@@ -116,8 +116,8 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		// objects, so we create a new object of the object's type to use the caching client
 		obj, err := r.targetScheme.New(ref.GroupVersionKind())
 		if err != nil {
-			log.Info("could not create new object of kind for health checks (probably not registered in the used scheme), falling back to unstructured request",
-				"GroupVersionKind", ref.GroupVersionKind().String(), "error", err.Error())
+			log.V(1).Info("could not create new object of kind for health checks (probably not registered in the used scheme), falling back to unstructured request",
+				"GroupVersionKind", ref.GroupVersionKind().String(), "err", err.Error())
 
 			// fallback to unstructured requests if the object's type is not registered in the scheme
 			unstructuredObj := &unstructured.Unstructured{}
@@ -126,9 +126,10 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			obj = unstructuredObj
 		}
 
+		resourceLog := log.WithValues("resource", utils.ObjectReferceLogWrapper{ObjectReference: ref.ObjectReference})
 		if err := r.targetClient.Get(r.ctx, client.ObjectKey{Namespace: ref.Namespace, Name: ref.Name}, obj); err != nil {
 			if apierrors.IsNotFound(err) {
-				log.Info("Could not get object", "namespace", ref.Namespace, "name", ref.Name)
+				resourceLog.Info("Health check failed: resource is missing")
 
 				var (
 					reason  = ref.Kind + "Missing"
@@ -147,6 +148,8 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 
 		if err := CheckHealth(r.targetScheme, obj); err != nil {
+			resourceLog.Info("Health check failed: resource is unhealthy")
+
 			var (
 				reason  = ref.Kind + "Unhealthy"
 				message = fmt.Sprintf("Required %s %q in namespace %q is unhealthy: %v", ref.Kind, ref.Name, ref.Namespace, err.Error())

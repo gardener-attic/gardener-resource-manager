@@ -27,12 +27,17 @@ LD_FLAGS := "-w $(shell EFFECTIVE_VERSION=$(EFFECTIVE_VERSION) $(REPO_ROOT)/vend
 # Rules for local development scenarios #
 #########################################
 
+ZAP_DEVEL     := true
+ZAP_LOG_LEVEL := debug
+
 .PHONY: start
 start:
 	@GO111MODULE=on go run \
 	    -mod=vendor \
 		-ldflags $(LD_FLAGS) \
 		./cmd/gardener-resource-manager \
+	  --zap-devel=$(ZAP_DEVEL) \
+	  --zap-log-level=$(ZAP_LOG_LEVEL) \
 	  --leader-election=false \
 	  --sync-period=60s \
 	  --max-concurrent-workers=10 \
