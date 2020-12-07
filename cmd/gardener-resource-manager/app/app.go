@@ -30,6 +30,7 @@ import (
 	secretcontroller "github.com/gardener/gardener-resource-manager/pkg/controller/secret"
 	"github.com/gardener/gardener-resource-manager/pkg/healthz"
 	logpkg "github.com/gardener/gardener-resource-manager/pkg/log"
+	"github.com/gardener/gardener-resource-manager/pkg/version"
 )
 
 var log = runtimelog.Log.WithName("gardener-resource-manager")
@@ -48,13 +49,14 @@ func NewResourceManagerCommand() *cobra.Command {
 	healthControllerOpts := &healthcontroller.ControllerOptions{}
 
 	cmd := &cobra.Command{
-		Use: "gardener-resource-manager",
+		Use:     "gardener-resource-manager",
+		Version: version.Get().GitVersion,
 
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := context.WithCancel(cmd.Context())
 			defer cancel()
 
-			entryLog.Info("Starting gardener-resource-manager...")
+			entryLog.Info("Starting gardener-resource-manager...", "version", version.Get().GitVersion)
 			cmd.Flags().VisitAll(func(flag *pflag.Flag) {
 				entryLog.Info(fmt.Sprintf("FLAG: --%s=%s", flag.Name, flag.Value))
 			})
