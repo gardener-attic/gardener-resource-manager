@@ -57,6 +57,7 @@ var _ = Describe("SecretReconciler", func() {
 		classFilter = filter.NewClassFilter("seed")
 		r = &secretcontroller.Reconciler{ClassFilter: classFilter}
 
+		Expect(inject.StopChannelInto(context.TODO().Done(), r)).To(BeTrue())
 		Expect(inject.ClientInto(c, r)).To(BeTrue())
 		Expect(inject.LoggerInto(log.NullLogger{}, r)).To(BeTrue())
 
@@ -84,7 +85,7 @@ var _ = Describe("SecretReconciler", func() {
 
 	Describe("#Reconcile", func() {
 		It("should do nothing if the secret has been deleted", func() {
-			c.EXPECT().Get(nil, secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
+			c.EXPECT().Get(gomock.Any(), secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
 				Return(apierrors.NewNotFound(corev1.Resource("secrets"), secret.Name))
 
 			res, err := r.Reconcile(secretReq)
@@ -97,7 +98,7 @@ var _ = Describe("SecretReconciler", func() {
 		It("should do nothing if secret get fails", func() {
 			fakeErr := fmt.Errorf("fake")
 
-			c.EXPECT().Get(nil, secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
+			c.EXPECT().Get(gomock.Any(), secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
 				Return(fakeErr)
 
 			_, err := r.Reconcile(secretReq)
@@ -108,12 +109,12 @@ var _ = Describe("SecretReconciler", func() {
 			fakeErr := fmt.Errorf("fake")
 
 			gomock.InOrder(
-				c.EXPECT().Get(nil, secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
+				c.EXPECT().Get(gomock.Any(), secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
 					DoAndReturn(func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
 						secret.DeepCopyInto(obj.(*corev1.Secret))
 						return nil
 					}),
-				c.EXPECT().List(nil, gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
+				c.EXPECT().List(gomock.Any(), gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
 					Return(fakeErr),
 			)
 
@@ -123,12 +124,12 @@ var _ = Describe("SecretReconciler", func() {
 
 		It("should do nothing if there is no MR in namespace", func() {
 			gomock.InOrder(
-				c.EXPECT().Get(nil, secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
+				c.EXPECT().Get(gomock.Any(), secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
 					DoAndReturn(func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
 						secret.DeepCopyInto(obj.(*corev1.Secret))
 						return nil
 					}),
-				c.EXPECT().List(nil, gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
+				c.EXPECT().List(gomock.Any(), gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
 					Return(nil),
 			)
 
@@ -150,12 +151,12 @@ var _ = Describe("SecretReconciler", func() {
 			}}
 
 			gomock.InOrder(
-				c.EXPECT().Get(nil, secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
+				c.EXPECT().Get(gomock.Any(), secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
 					DoAndReturn(func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
 						secret.DeepCopyInto(obj.(*corev1.Secret))
 						return nil
 					}),
-				c.EXPECT().List(nil, gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
+				c.EXPECT().List(gomock.Any(), gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
 					DoAndReturn(func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
 						list.(*resourcesv1alpha1.ManagedResourceList).Items = mrs
 						return nil
@@ -180,12 +181,12 @@ var _ = Describe("SecretReconciler", func() {
 			}}
 
 			gomock.InOrder(
-				c.EXPECT().Get(nil, secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
+				c.EXPECT().Get(gomock.Any(), secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
 					DoAndReturn(func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
 						secret.DeepCopyInto(obj.(*corev1.Secret))
 						return nil
 					}),
-				c.EXPECT().List(nil, gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
+				c.EXPECT().List(gomock.Any(), gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
 					DoAndReturn(func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
 						list.(*resourcesv1alpha1.ManagedResourceList).Items = mrs
 						return nil
@@ -211,12 +212,12 @@ var _ = Describe("SecretReconciler", func() {
 				},
 			}}
 
-			c.EXPECT().Get(nil, secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
+			c.EXPECT().Get(gomock.Any(), secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
 				DoAndReturn(func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
 					secret.DeepCopyInto(obj.(*corev1.Secret))
 					return nil
 				})
-			c.EXPECT().List(nil, gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
+			c.EXPECT().List(gomock.Any(), gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
 				DoAndReturn(func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
 					list.(*resourcesv1alpha1.ManagedResourceList).Items = mrs
 					return nil
@@ -239,17 +240,17 @@ var _ = Describe("SecretReconciler", func() {
 				},
 			}}
 
-			c.EXPECT().Get(nil, secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
+			c.EXPECT().Get(gomock.Any(), secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
 				DoAndReturn(func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
 					secret.DeepCopyInto(obj.(*corev1.Secret))
 					return nil
 				}).Times(2)
-			c.EXPECT().List(nil, gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
+			c.EXPECT().List(gomock.Any(), gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
 				DoAndReturn(func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
 					list.(*resourcesv1alpha1.ManagedResourceList).Items = mrs
 					return nil
 				})
-			c.EXPECT().Update(nil, gomock.AssignableToTypeOf(secret)).
+			c.EXPECT().Update(gomock.Any(), gomock.AssignableToTypeOf(secret)).
 				DoAndReturn(func(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
 					s := obj.(*corev1.Secret)
 					Expect(s.Finalizers).To(ConsistOf(classFilter.FinalizerName()))
@@ -271,12 +272,12 @@ var _ = Describe("SecretReconciler", func() {
 				},
 			}}
 
-			c.EXPECT().Get(nil, secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
+			c.EXPECT().Get(gomock.Any(), secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
 				DoAndReturn(func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
 					secret.DeepCopyInto(obj.(*corev1.Secret))
 					return nil
 				})
-			c.EXPECT().List(nil, gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
+			c.EXPECT().List(gomock.Any(), gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
 				DoAndReturn(func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
 					list.(*resourcesv1alpha1.ManagedResourceList).Items = mrs
 					return nil
@@ -299,17 +300,17 @@ var _ = Describe("SecretReconciler", func() {
 				},
 			}}
 
-			c.EXPECT().Get(nil, secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
+			c.EXPECT().Get(gomock.Any(), secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
 				DoAndReturn(func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
 					secret.DeepCopyInto(obj.(*corev1.Secret))
 					return nil
 				}).Times(2)
-			c.EXPECT().List(nil, gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
+			c.EXPECT().List(gomock.Any(), gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
 				DoAndReturn(func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
 					list.(*resourcesv1alpha1.ManagedResourceList).Items = mrs
 					return nil
 				})
-			c.EXPECT().Update(nil, gomock.AssignableToTypeOf(secret)).
+			c.EXPECT().Update(gomock.Any(), gomock.AssignableToTypeOf(secret)).
 				DoAndReturn(func(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
 					s := obj.(*corev1.Secret)
 					Expect(s.Finalizers).To(BeEmpty())
@@ -335,17 +336,17 @@ var _ = Describe("SecretReconciler", func() {
 				},
 			}}
 
-			c.EXPECT().Get(nil, secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
+			c.EXPECT().Get(gomock.Any(), secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
 				DoAndReturn(func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
 					secret.DeepCopyInto(obj.(*corev1.Secret))
 					return nil
 				}).Times(2)
-			c.EXPECT().List(nil, gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
+			c.EXPECT().List(gomock.Any(), gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
 				DoAndReturn(func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
 					list.(*resourcesv1alpha1.ManagedResourceList).Items = mrs
 					return nil
 				})
-			c.EXPECT().Update(nil, gomock.AssignableToTypeOf(secret)).
+			c.EXPECT().Update(gomock.Any(), gomock.AssignableToTypeOf(secret)).
 				DoAndReturn(func(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
 					s := obj.(*corev1.Secret)
 					Expect(s.Finalizers).To(BeEmpty())
@@ -371,17 +372,17 @@ var _ = Describe("SecretReconciler", func() {
 				},
 			}}
 
-			c.EXPECT().Get(nil, secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
+			c.EXPECT().Get(gomock.Any(), secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
 				DoAndReturn(func(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
 					secret.DeepCopyInto(obj.(*corev1.Secret))
 					return nil
 				}).Times(2)
-			c.EXPECT().List(nil, gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
+			c.EXPECT().List(gomock.Any(), gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
 				DoAndReturn(func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
 					list.(*resourcesv1alpha1.ManagedResourceList).Items = mrs
 					return nil
 				})
-			c.EXPECT().Update(nil, gomock.AssignableToTypeOf(secret)).
+			c.EXPECT().Update(gomock.Any(), gomock.AssignableToTypeOf(secret)).
 				DoAndReturn(func(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
 					return fmt.Errorf("fake")
 				})
