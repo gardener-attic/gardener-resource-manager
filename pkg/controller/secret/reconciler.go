@@ -61,10 +61,13 @@ func (r *Reconciler) InjectLogger(l logr.Logger) error {
 
 // Reconcile implements reconcile.Reconciler.
 func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) {
+	ctx, cancel := context.WithTimeout(r.ctx, time.Minute)
+	defer cancel()
+
 	log := r.log.WithValues("secret", req)
 
 	secret := &corev1.Secret{}
-	if err := r.client.Get(r.ctx, req.NamespacedName, secret); err != nil {
+	if err := r.client.Get(ctx, req.NamespacedName, secret); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info("Stopping reconciliation of Secret, as it has been deleted")
 			return reconcile.Result{}, nil
@@ -73,7 +76,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	}
 
 	resourceList := &resourcesv1alpha1.ManagedResourceList{}
-	if err := r.client.List(r.ctx, resourceList, client.InNamespace(secret.Namespace)); err != nil {
+	if err := r.client.List(ctx, resourceList, client.InNamespace(secret.Namespace)); err != nil {
 		return reconcile.Result{}, fmt.Errorf("could not fetch ManagedResources in namespace of Secret: %+v", err)
 	}
 
@@ -103,7 +106,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	}
 
 	if addFinalizer || removeFinalizer {
-		if err := utils.TryUpdate(r.ctx, retry.DefaultBackoff, r.client, secret, func() error {
+		if err := utils.TryUpdate(ctx, retry.DefaultBackoff, r.client, secret, func() error {
 			secretFinalizers := sets.NewString(secret.Finalizers...)
 			if addFinalizer {
 				secretFinalizers.Insert(controllerFinalizer)

@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -113,7 +114,10 @@ func NewResourceManagerCommand() *cobra.Command {
 				}
 			}()
 
-			if !targetClientOpts.Completed().WaitForCacheSync(ctx.Done()) {
+			ctxWaitForCache, cancelWaitForCache := context.WithTimeout(ctx, 5*time.Minute)
+			defer cancelWaitForCache()
+
+			if !targetClientOpts.Completed().WaitForCacheSync(ctxWaitForCache.Done()) {
 				return fmt.Errorf("timed out waiting for target cache to sync")
 			}
 

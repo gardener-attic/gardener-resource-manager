@@ -66,11 +66,14 @@ func (r *Reconciler) InjectLogger(l logr.Logger) error {
 
 // Reconcile performs health checks.
 func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+	ctx, cancel := context.WithTimeout(r.ctx, time.Minute)
+	defer cancel()
+
 	log := r.log.WithValues("object", req)
 	log.Info("Starting ManagedResource health checks")
 
 	mr := &resourcesv1alpha1.ManagedResource{}
-	if err := r.client.Get(r.ctx, req.NamespacedName, mr); err != nil {
+	if err := r.client.Get(ctx, req.NamespacedName, mr); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info("Stopping health checks for ManagedResource, as it has been deleted")
 			return reconcile.Result{}, nil
@@ -89,7 +92,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	if !mr.DeletionTimestamp.IsZero() {
 		conditionResourcesHealthy = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesHealthy, resourcesv1alpha1.ConditionFalse, resourcesv1alpha1.ConditionDeletionPending, "The resources are currently being deleted.")
-		if err := tryUpdateManagedResourceCondition(r.ctx, r.client, mr, conditionResourcesHealthy); err != nil {
+		if err := tryUpdateManagedResourceCondition(ctx, r.client, mr, conditionResourcesHealthy); err != nil {
 			return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v ", err)
 		}
 
@@ -126,7 +129,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			obj = unstructuredObj
 		}
 
-		if err := r.targetClient.Get(r.ctx, client.ObjectKey{Namespace: ref.Namespace, Name: ref.Name}, obj); err != nil {
+		if err := r.targetClient.Get(ctx, client.ObjectKey{Namespace: ref.Namespace, Name: ref.Name}, obj); err != nil {
 			if apierrors.IsNotFound(err) {
 				log.Info("Could not get object", "namespace", ref.Namespace, "name", ref.Name)
 
@@ -136,7 +139,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				)
 
 				conditionResourcesHealthy = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesHealthy, resourcesv1alpha1.ConditionFalse, reason, message)
-				if err := tryUpdateManagedResourceCondition(r.ctx, r.client, mr, conditionResourcesHealthy); err != nil {
+				if err := tryUpdateManagedResourceCondition(ctx, r.client, mr, conditionResourcesHealthy); err != nil {
 					return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v ", err)
 				}
 
@@ -153,7 +156,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			)
 
 			conditionResourcesHealthy = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesHealthy, resourcesv1alpha1.ConditionFalse, reason, message)
-			if err := tryUpdateManagedResourceCondition(r.ctx, r.client, mr, conditionResourcesHealthy); err != nil {
+			if err := tryUpdateManagedResourceCondition(ctx, r.client, mr, conditionResourcesHealthy); err != nil {
 				return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v ", err)
 			}
 
@@ -164,7 +167,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	conditionResourcesHealthy = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesHealthy, resourcesv1alpha1.ConditionTrue, "ResourcesHealthy", "All resources are healthy.")
 
 	if !apiequality.Semantic.DeepEqual(oldConditions, []resourcesv1alpha1.ManagedResourceCondition{conditionResourcesHealthy}) {
-		if err := tryUpdateManagedResourceCondition(r.ctx, r.client, mr, conditionResourcesHealthy); err != nil {
+		if err := tryUpdateManagedResourceCondition(ctx, r.client, mr, conditionResourcesHealthy); err != nil {
 			return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v ", err)
 		}
 	}
