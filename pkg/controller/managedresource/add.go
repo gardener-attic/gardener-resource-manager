@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"time"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	extensionscontroller "github.com/gardener/gardener/extensions/pkg/controller"
 	extensionspredicate "github.com/gardener/gardener/extensions/pkg/predicate"
 	"github.com/spf13/pflag"
@@ -33,6 +35,7 @@ import (
 	"github.com/gardener/gardener-resource-manager/pkg/filter"
 	"github.com/gardener/gardener-resource-manager/pkg/mapper"
 	managerpredicate "github.com/gardener/gardener-resource-manager/pkg/predicate"
+	extensionshandler "github.com/gardener/gardener/extensions/pkg/handler"
 )
 
 // ControllerName is the name of the managedresource controller.
@@ -64,7 +67,7 @@ func AddToManagerWithOptions(mgr manager.Manager, conf ControllerConfig) error {
 	c, err := controller.New(ControllerName, mgr, controller.Options{
 		MaxConcurrentReconciles: conf.MaxConcurrentWorkers,
 		Reconciler: extensionscontroller.OperationAnnotationWrapper(
-			&resourcesv1alpha1.ManagedResource{},
+			func() client.Object { return &resourcesv1alpha1.ManagedResource{} },
 			&Reconciler{
 				targetClient:     conf.TargetClientConfig.Client,
 				targetRESTMapper: conf.TargetClientConfig.RESTMapper,
@@ -93,7 +96,7 @@ func AddToManagerWithOptions(mgr manager.Manager, conf ControllerConfig) error {
 
 	if err := c.Watch(
 		&source.Kind{Type: &corev1.Secret{}},
-		&handler.EnqueueRequestsFromMapFunc{ToRequests: mapper.SecretToManagedResourceMapper(conf.ClassFilter)},
+		extensionshandler.EnqueueRequestsFromMapper(mapper.SecretToManagedResourceMapper(conf.ClassFilter), extensionshandler.UpdateWithOldAndNew),
 	); err != nil {
 		return fmt.Errorf("unable to watch Secrets mapping to ManagedResources: %w", err)
 	}

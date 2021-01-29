@@ -23,6 +23,7 @@ import (
 	"github.com/gardener/gardener-resource-manager/pkg/mapper"
 	mockclient "github.com/gardener/gardener-resource-manager/pkg/mock/controller-runtime/client"
 
+	extensionshandler "github.com/gardener/gardener/extensions/pkg/handler"
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -32,7 +33,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/inject"
 )
@@ -41,7 +41,7 @@ var _ = Describe("#SecretToManagedResourceMapper", func() {
 	var (
 		c      *mockclient.MockClient
 		ctrl   *gomock.Controller
-		m      handler.Mapper
+		m      extensionshandler.Mapper
 		secret *corev1.Secret
 		filter *filter2.ClassFilter
 	)
@@ -73,14 +73,12 @@ var _ = Describe("#SecretToManagedResourceMapper", func() {
 	})
 
 	It("should do nothing, if Object is nil", func() {
-		requests := m.Map(handler.MapObject{})
+		requests := m.Map(nil)
 		Expect(requests).To(BeEmpty())
 	})
 
 	It("should do nothing, if Object is not a Secret", func() {
-		requests := m.Map(handler.MapObject{
-			Object: &corev1.Pod{},
-		})
+		requests := m.Map(&corev1.Pod{})
 		Expect(requests).To(BeEmpty())
 	})
 
@@ -88,18 +86,14 @@ var _ = Describe("#SecretToManagedResourceMapper", func() {
 		c.EXPECT().List(nil, gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace)).
 			Return(fmt.Errorf("fake"))
 
-		requests := m.Map(handler.MapObject{
-			Object: secret,
-		})
+		requests := m.Map(secret)
 		Expect(requests).To(BeEmpty())
 	})
 
 	It("should do nothing, if there are no ManagedResources", func() {
 		c.EXPECT().List(nil, gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResourceList{}), client.InNamespace(secret.Namespace))
 
-		requests := m.Map(handler.MapObject{
-			Object: secret,
-		})
+		requests := m.Map(secret)
 		Expect(requests).To(BeEmpty())
 	})
 
@@ -114,9 +108,7 @@ var _ = Describe("#SecretToManagedResourceMapper", func() {
 				return nil
 			})
 
-		requests := m.Map(handler.MapObject{
-			Object: secret,
-		})
+		requests := m.Map(secret)
 		Expect(requests).To(BeEmpty())
 	})
 
@@ -138,9 +130,7 @@ var _ = Describe("#SecretToManagedResourceMapper", func() {
 				return nil
 			})
 
-		requests := m.Map(handler.MapObject{
-			Object: secret,
-		})
+		requests := m.Map(secret)
 		Expect(requests).To(ConsistOf(
 			reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      mr.Name,

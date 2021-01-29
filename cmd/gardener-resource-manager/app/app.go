@@ -109,7 +109,7 @@ func NewResourceManagerCommand() *cobra.Command {
 				defer wg.Done()
 
 				wg.Add(1)
-				if err := targetClientOpts.Completed().Start(ctx.Done()); err != nil {
+				if err := targetClientOpts.Completed().Start(ctx); err != nil {
 					errChan <- fmt.Errorf("error syncing target cache: %w", err)
 				}
 			}()
@@ -117,7 +117,7 @@ func NewResourceManagerCommand() *cobra.Command {
 			ctxWaitForCache, cancelWaitForCache := context.WithTimeout(ctx, 5*time.Minute)
 			defer cancelWaitForCache()
 
-			if !targetClientOpts.Completed().WaitForCacheSync(ctxWaitForCache.Done()) {
+			if !targetClientOpts.Completed().WaitForCacheSync(ctxWaitForCache) {
 				return fmt.Errorf("timed out waiting for target cache to sync")
 			}
 
@@ -125,7 +125,7 @@ func NewResourceManagerCommand() *cobra.Command {
 				defer wg.Done()
 
 				wg.Add(1)
-				if err := mgr.Start(ctx.Done()); err != nil {
+				if err := mgr.Start(ctx); err != nil {
 					errChan <- fmt.Errorf("error running manager: %w", err)
 				}
 			}()

@@ -37,7 +37,6 @@ import (
 
 // Reconciler performs health checks for resources managed by ManagedResources.
 type Reconciler struct {
-	ctx          context.Context
 	log          logr.Logger
 	client       client.Client
 	targetClient client.Client
@@ -52,12 +51,6 @@ func (r *Reconciler) InjectClient(c client.Client) error {
 	return nil
 }
 
-// InjectStopChannel injects a stop channel into the reconciler.
-func (r *Reconciler) InjectStopChannel(stopCh <-chan struct{}) error {
-	r.ctx = utils.ContextFromStopChannel(stopCh)
-	return nil
-}
-
 // InjectLogger injects a logger into the reconciler.
 func (r *Reconciler) InjectLogger(l logr.Logger) error {
 	r.log = l.WithName(ControllerName)
@@ -65,8 +58,8 @@ func (r *Reconciler) InjectLogger(l logr.Logger) error {
 }
 
 // Reconcile performs health checks.
-func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx, cancel := context.WithTimeout(r.ctx, time.Minute)
+func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
 	log := r.log.WithValues("object", req)
@@ -114,10 +107,10 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	)
 
 	for _, ref := range resourcesObjectReferences {
-		var obj runtime.Object
+		var obj client.Object
 		// sigs.k8s.io/controller-runtime/pkg/client.DelegatingReader does not use the cache for unstructured.Unstructured
 		// objects, so we create a new object of the object's type to use the caching client
-		obj, err := r.targetScheme.New(ref.GroupVersionKind())
+		runtimeObject, err := r.targetScheme.New(ref.GroupVersionKind())
 		if err != nil {
 			log.Info("could not create new object of kind for health checks (probably not registered in the used scheme), falling back to unstructured request",
 				"GroupVersionKind", ref.GroupVersionKind().String(), "error", err.Error())
@@ -127,6 +120,11 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			unstructuredObj.SetAPIVersion(ref.APIVersion)
 			unstructuredObj.SetKind(ref.Kind)
 			obj = unstructuredObj
+		} else {
+			var ok bool
+			if obj, ok = runtimeObject.(client.Object); !ok {
+				return ctrl.Result{}, fmt.Errorf("could not execute health check because object type %q is unsupported", ref.GroupVersionKind().String())
+			}
 		}
 
 		if err := r.targetClient.Get(ctx, client.ObjectKey{Namespace: ref.Namespace, Name: ref.Name}, obj); err != nil {

@@ -60,7 +60,6 @@ var (
 
 // Reconciler contains information in order to reconcile instances of ManagedResource.
 type Reconciler struct {
-	ctx context.Context
 	log logr.Logger
 
 	client           client.Client
@@ -79,12 +78,6 @@ func (r *Reconciler) InjectClient(c client.Client) error {
 	return nil
 }
 
-// InjectStopChannel injects a stop channel into the reconciler.
-func (r *Reconciler) InjectStopChannel(stopCh <-chan struct{}) error {
-	r.ctx = utils.ContextFromStopChannel(stopCh)
-	return nil
-}
-
 // InjectLogger injects a logger into the reconciler.
 func (r *Reconciler) InjectLogger(l logr.Logger) error {
 	r.log = l.WithName(ControllerName)
@@ -92,8 +85,8 @@ func (r *Reconciler) InjectLogger(l logr.Logger) error {
 }
 
 // Reconcile implements `reconcile.Reconciler`.
-func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx, cancel := context.WithTimeout(r.ctx, time.Minute)
+func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
 	log := r.log.WithValues("object", req)

@@ -20,10 +20,10 @@ import (
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
 	"github.com/gardener/gardener-resource-manager/pkg/controller/utils"
 
+	extensionshandler "github.com/gardener/gardener/extensions/pkg/handler"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -44,12 +44,12 @@ func (m *secretToManagedResourceMapper) InjectStopChannel(stopCh <-chan struct{}
 	return nil
 }
 
-func (m *secretToManagedResourceMapper) Map(obj handler.MapObject) []reconcile.Request {
-	if obj.Object == nil {
+func (m *secretToManagedResourceMapper) Map(obj client.Object) []reconcile.Request {
+	if obj == nil {
 		return nil
 	}
 
-	secret, ok := obj.Object.(*corev1.Secret)
+	secret, ok := obj.(*corev1.Secret)
 	if !ok {
 		return nil
 	}
@@ -81,6 +81,6 @@ func (m *secretToManagedResourceMapper) Map(obj handler.MapObject) []reconcile.R
 
 // SecretToManagedResourceMapper returns a mapper that returns requests for ManagedResources whose
 // referenced secrets have been modified.
-func SecretToManagedResourceMapper(predicates ...predicate.Predicate) handler.Mapper {
+func SecretToManagedResourceMapper(predicates ...predicate.Predicate) extensionshandler.Mapper {
 	return &secretToManagedResourceMapper{predicates: predicates}
 }

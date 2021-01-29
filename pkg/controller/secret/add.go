@@ -17,6 +17,8 @@ package secret
 import (
 	"fmt"
 
+	extensionshandler "github.com/gardener/gardener/extensions/pkg/handler"
+
 	"github.com/spf13/pflag"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -63,7 +65,7 @@ func AddToManagerWithOptions(mgr manager.Manager, conf ControllerConfig) error {
 
 	if err := secretController.Watch(
 		&source.Kind{Type: &resourcesv1alpha1.ManagedResource{}},
-		&handler.EnqueueRequestsFromMapFunc{ToRequests: mapper.ManagedResourceToSecretsMapper()},
+		extensionshandler.EnqueueRequestsFromMapper(mapper.ManagedResourceToSecretsMapper(), extensionshandler.UpdateWithOldAndNew),
 		predicate.GenerationChangedPredicate{},
 	); err != nil {
 		return fmt.Errorf("unable to watch ManagedResources: %w", err)
