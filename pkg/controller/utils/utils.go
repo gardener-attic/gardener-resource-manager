@@ -16,13 +16,12 @@ package utils
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"time"
 
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -34,8 +33,8 @@ import (
 )
 
 // EvalGenericPredicate returns true if all predicates match for the given object.
-func EvalGenericPredicate(obj runtime.Object, predicates ...predicate.Predicate) bool {
-	e := NewGenericEventFromObject(obj)
+func EvalGenericPredicate(obj client.Object, predicates ...predicate.Predicate) bool {
+	e := event.GenericEvent{Object: obj}
 
 	for _, p := range predicates {
 		if !p.Generic(e) {
@@ -46,37 +45,11 @@ func EvalGenericPredicate(obj runtime.Object, predicates ...predicate.Predicate)
 	return true
 }
 
-// NewGenericEventFromObject creates a new GenericEvent from the given runtime.Object.
-//
-// It tries to extract a metav1.Object from the given Object. If it fails, the Meta
-// of the resulting GenericEvent will be `nil`.
-func NewGenericEventFromObject(obj runtime.Object) event.GenericEvent {
-	accessor, err := meta.Accessor(obj)
-	if err != nil {
-		return NewGenericEvent(nil, obj)
-	}
-
-	return NewGenericEvent(accessor, obj)
-}
-
-// NewGenericEvent creates a new GenericEvent from the given metav1.Object and runtime.Object.
-func NewGenericEvent(meta metav1.Object, obj runtime.Object) event.GenericEvent {
-	return event.GenericEvent{
-		Meta:   meta,
-		Object: obj,
-	}
-}
-
 // EnsureFinalizer ensures that a finalizer of the given name is set on the given object.
 // If the finalizer is not set, it adds it to the list of finalizers and updates the remote object.
-func EnsureFinalizer(ctx context.Context, c client.Client, finalizerName string, obj controllerutil.Object) error {
+func EnsureFinalizer(ctx context.Context, c client.Client, finalizerName string, obj client.Object) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		key, err := client.ObjectKeyFromObject(obj)
-		if err != nil {
-			return err
-		}
-
-		if err := c.Get(ctx, key, obj); err != nil {
+		if err := c.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
 			return err
 		}
 
@@ -94,14 +67,9 @@ func EnsureFinalizer(ctx context.Context, c client.Client, finalizerName string,
 
 // DeleteFinalizer ensures that the given finalizer is not present anymore in the given object.
 // If it is set, it removes it and issues an update.
-func DeleteFinalizer(ctx context.Context, c client.Client, finalizerName string, obj controllerutil.Object) error {
+func DeleteFinalizer(ctx context.Context, c client.Client, finalizerName string, obj client.Object) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		key, err := client.ObjectKeyFromObject(obj)
-		if err != nil {
-			return err
-		}
-
-		if err := c.Get(ctx, key, obj); client.IgnoreNotFound(err) != nil {
+		if err := c.Get(ctx, client.ObjectKeyFromObject(obj), obj); client.IgnoreNotFound(err) != nil {
 			return err
 		}
 
@@ -119,7 +87,7 @@ func DeleteFinalizer(ctx context.Context, c client.Client, finalizerName string,
 
 // TryUpdate tries to apply the given transformation function onto the given object, and to update it afterwards.
 // It retries the update with an exponential backoff.
-func TryUpdate(ctx context.Context, backoff wait.Backoff, c client.Client, obj runtime.Object, transform func() error) error {
+func TryUpdate(ctx context.Context, backoff wait.Backoff, c client.Client, obj client.Object, transform func() error) error {
 	return tryUpdate(ctx, backoff, c, obj, c.Update, transform)
 }
 
@@ -128,22 +96,21 @@ func TryUpdate(ctx context.Context, backoff wait.Backoff, c client.Client, obj r
 // controllerutil.CreateOrUpdate it tries to create a new typed object of obj's kind (using the provided scheme)
 // to make typed Get requests in order to leverage the client's cache.
 func TypedCreateOrUpdate(ctx context.Context, c client.Client, scheme *runtime.Scheme, obj *unstructured.Unstructured, alwaysUpdate bool, mutate func() error) (controllerutil.OperationResult, error) {
-	key, err := client.ObjectKeyFromObject(obj)
-	if err != nil {
-		return controllerutil.OperationResultNone, err
-	}
-
 	// client.DelegatingReader does not use its cache for unstructured.Unstructured objects, so we
 	// create a new typed object of the object's type to use the cache for get calls before applying changes
-	var current runtime.Object
+	var current client.Object
 	if typed, err := scheme.New(obj.GetObjectKind().GroupVersionKind()); err == nil {
-		current = typed
+		var ok bool
+		current, ok = typed.(client.Object)
+		if !ok {
+			return controllerutil.OperationResultNone, fmt.Errorf("object type %q is unsupported", obj.GetObjectKind().GroupVersionKind().String())
+		}
 	} else {
 		// fallback to unstructured request (type might not be registered in scheme)
 		current = obj
 	}
 
-	if err := c.Get(ctx, key, current); err != nil {
+	if err := c.Get(ctx, client.ObjectKeyFromObject(obj), current); err != nil {
 		if !apierrors.IsNotFound(err) {
 			return controllerutil.OperationResultNone, err
 		}
@@ -180,15 +147,12 @@ func TypedCreateOrUpdate(ctx context.Context, c client.Client, scheme *runtime.S
 
 // TryUpdateStatus tries to apply the given transformation function onto the given object, and to update its
 // status afterwards. It retries the status update with an exponential backoff.
-func TryUpdateStatus(ctx context.Context, backoff wait.Backoff, c client.Client, obj runtime.Object, transform func() error) error {
+func TryUpdateStatus(ctx context.Context, backoff wait.Backoff, c client.Client, obj client.Object, transform func() error) error {
 	return tryUpdate(ctx, backoff, c, obj, c.Status().Update, transform)
 }
 
-func tryUpdate(ctx context.Context, backoff wait.Backoff, c client.Client, obj runtime.Object, updateFunc func(context.Context, runtime.Object, ...client.UpdateOption) error, transform func() error) error {
-	key, err := client.ObjectKeyFromObject(obj)
-	if err != nil {
-		return err
-	}
+func tryUpdate(ctx context.Context, backoff wait.Backoff, c client.Client, obj client.Object, updateFunc func(context.Context, client.Object, ...client.UpdateOption) error, transform func() error) error {
+	key := client.ObjectKeyFromObject(obj)
 
 	return exponentialBackoff(ctx, backoff, func() (bool, error) {
 		if err := c.Get(ctx, key, obj); err != nil {

@@ -15,7 +15,6 @@
 package main
 
 import (
-	"context"
 	"os"
 
 	"github.com/gardener/gardener-resource-manager/cmd/gardener-resource-manager/app"
@@ -27,16 +26,9 @@ import (
 
 func main() {
 	runtimelog.SetLogger(log.ZapLogger(false))
+	ctx := signals.SetupSignalHandler()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		defer cancel()
-		<-signals.SetupSignalHandler()
-	}()
-
-	cmd := app.NewResourceManagerCommand()
-
-	if err := cmd.ExecuteContext(ctx); err != nil {
+	if err := app.NewResourceManagerCommand().ExecuteContext(ctx); err != nil {
 		runtimelog.Log.Error(err, "error executing the main controller command")
 		os.Exit(1)
 	}

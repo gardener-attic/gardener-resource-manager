@@ -18,31 +18,29 @@ import (
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
 	"github.com/gardener/gardener-resource-manager/pkg/mapper"
 
+	extensionshandler "github.com/gardener/gardener/extensions/pkg/handler"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var _ = Describe("#ManagedResourceToSecretsMapper", func() {
-	var m handler.Mapper
+	var m extensionshandler.Mapper
 
 	BeforeEach(func() {
 		m = mapper.ManagedResourceToSecretsMapper()
 	})
 
 	It("should do nothing, if Object is nil", func() {
-		requests := m.Map(handler.MapObject{})
+		requests := m.Map(nil)
 		Expect(requests).To(BeEmpty())
 	})
 
 	It("should do nothing, if Object is not a ManagedResource", func() {
-		requests := m.Map(handler.MapObject{
-			Object: &corev1.Pod{},
-		})
+		requests := m.Map(&corev1.Pod{})
 		Expect(requests).To(BeEmpty())
 	})
 
@@ -60,9 +58,7 @@ var _ = Describe("#ManagedResourceToSecretsMapper", func() {
 			},
 		}
 
-		requests := m.Map(handler.MapObject{
-			Object: mr,
-		})
+		requests := m.Map(mr)
 		Expect(requests).To(ConsistOf(
 			reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      mr.Spec.SecretRefs[0].Name,

@@ -41,6 +41,8 @@ import (
 
 var _ = Describe("SecretReconciler", func() {
 	var (
+		ctx = context.Background()
+
 		ctrl *gomock.Controller
 		c    *mockclient.MockClient
 
@@ -57,7 +59,6 @@ var _ = Describe("SecretReconciler", func() {
 		classFilter = filter.NewClassFilter("seed")
 		r = &secretcontroller.Reconciler{ClassFilter: classFilter}
 
-		Expect(inject.StopChannelInto(context.TODO().Done(), r)).To(BeTrue())
 		Expect(inject.ClientInto(c, r)).To(BeTrue())
 		Expect(inject.LoggerInto(log.NullLogger{}, r)).To(BeTrue())
 
@@ -77,18 +78,12 @@ var _ = Describe("SecretReconciler", func() {
 		ctrl.Finish()
 	})
 
-	Describe("#InjectStopChannel", func() {
-		It("should be able to inject a stop channel", func() {
-			Expect(inject.StopChannelInto(context.TODO().Done(), r)).To(BeTrue())
-		})
-	})
-
 	Describe("#Reconcile", func() {
 		It("should do nothing if the secret has been deleted", func() {
 			c.EXPECT().Get(gomock.Any(), secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
 				Return(apierrors.NewNotFound(corev1.Resource("secrets"), secret.Name))
 
-			res, err := r.Reconcile(secretReq)
+			res, err := r.Reconcile(ctx, secretReq)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(Equal(reconcile.Result{
 				Requeue: false,
@@ -101,7 +96,7 @@ var _ = Describe("SecretReconciler", func() {
 			c.EXPECT().Get(gomock.Any(), secretReq.NamespacedName, gomock.AssignableToTypeOf(&corev1.Secret{})).
 				Return(fakeErr)
 
-			_, err := r.Reconcile(secretReq)
+			_, err := r.Reconcile(ctx, secretReq)
 			Expect(err).To(MatchError(ContainSubstring("fake")))
 		})
 
@@ -118,7 +113,7 @@ var _ = Describe("SecretReconciler", func() {
 					Return(fakeErr),
 			)
 
-			_, err := r.Reconcile(secretReq)
+			_, err := r.Reconcile(ctx, secretReq)
 			Expect(err).To(MatchError(ContainSubstring("fake")))
 		})
 
@@ -133,7 +128,7 @@ var _ = Describe("SecretReconciler", func() {
 					Return(nil),
 			)
 
-			res, err := r.Reconcile(secretReq)
+			res, err := r.Reconcile(ctx, secretReq)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(Equal(reconcile.Result{
 				Requeue: false,
@@ -163,7 +158,7 @@ var _ = Describe("SecretReconciler", func() {
 					}),
 			)
 
-			res, err := r.Reconcile(secretReq)
+			res, err := r.Reconcile(ctx, secretReq)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(Equal(reconcile.Result{
 				Requeue: false,
@@ -193,7 +188,7 @@ var _ = Describe("SecretReconciler", func() {
 					}),
 			)
 
-			res, err := r.Reconcile(secretReq)
+			res, err := r.Reconcile(ctx, secretReq)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(Equal(reconcile.Result{
 				Requeue: false,
@@ -223,7 +218,7 @@ var _ = Describe("SecretReconciler", func() {
 					return nil
 				})
 
-			res, err := r.Reconcile(secretReq)
+			res, err := r.Reconcile(ctx, secretReq)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(Equal(reconcile.Result{
 				Requeue: false,
@@ -257,7 +252,7 @@ var _ = Describe("SecretReconciler", func() {
 					return nil
 				})
 
-			res, err := r.Reconcile(secretReq)
+			res, err := r.Reconcile(ctx, secretReq)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(Equal(reconcile.Result{
 				Requeue: false,
@@ -283,7 +278,7 @@ var _ = Describe("SecretReconciler", func() {
 					return nil
 				})
 
-			res, err := r.Reconcile(secretReq)
+			res, err := r.Reconcile(ctx, secretReq)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(Equal(reconcile.Result{
 				Requeue: false,
@@ -317,7 +312,7 @@ var _ = Describe("SecretReconciler", func() {
 					return nil
 				})
 
-			res, err := r.Reconcile(secretReq)
+			res, err := r.Reconcile(ctx, secretReq)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(Equal(reconcile.Result{
 				Requeue: false,
@@ -353,7 +348,7 @@ var _ = Describe("SecretReconciler", func() {
 					return nil
 				})
 
-			res, err := r.Reconcile(secretReq)
+			res, err := r.Reconcile(ctx, secretReq)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res).To(Equal(reconcile.Result{
 				Requeue: false,
@@ -387,7 +382,7 @@ var _ = Describe("SecretReconciler", func() {
 					return fmt.Errorf("fake")
 				})
 
-			res, err := r.Reconcile(secretReq)
+			res, err := r.Reconcile(ctx, secretReq)
 			Expect(err).To(BeNil())
 			Expect(res).To(Equal(reconcile.Result{
 				RequeueAfter: 5 * time.Second,

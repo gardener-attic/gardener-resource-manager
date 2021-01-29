@@ -15,6 +15,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/user"
@@ -35,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 var _ Option = &TargetClientOptions{}
@@ -169,39 +171,27 @@ func getTargetRESTConfig(kubeconfigPath string) (*rest.Config, error) {
 }
 
 func newCachedClient(cache cache.Cache, config rest.Config, options client.Options) (client.Client, error) {
+	// TODO: make this configurable
 	config.QPS = 100.0
 	config.Burst = 130
 
-	// Create the Client for Write operations.
-	c, err := client.New(&config, options)
-	if err != nil {
-		return nil, err
-	}
-
-	return &client.DelegatingClient{
-		Reader: &client.DelegatingReader{
-			CacheReader:  cache,
-			ClientReader: c,
-		},
-		Writer:       c,
-		StatusClient: c,
-	}, nil
+	return manager.NewClientBuilder().Build(cache, &config, options)
 }
 
 // Start starts the target cache if the client is cached.
-func (c *TargetClientConfig) Start(stopCh <-chan struct{}) error {
+func (c *TargetClientConfig) Start(ctx context.Context) error {
 	if c.cache == nil {
 		return nil
 	}
-	return c.cache.Start(stopCh)
+	return c.cache.Start(ctx)
 }
 
 // WaitForCacheSync waits for the caches of the target cache to be synced initially.
-func (c *TargetClientConfig) WaitForCacheSync(stopCh <-chan struct{}) bool {
+func (c *TargetClientConfig) WaitForCacheSync(ctx context.Context) bool {
 	if c.cache == nil {
 		return true
 	}
-	return c.cache.WaitForCacheSync(stopCh)
+	return c.cache.WaitForCacheSync(ctx)
 }
 
 // Apply sets the values of this TargetClientConfig on the given config.

@@ -45,16 +45,8 @@ var _ = Describe("#HasFinalizer", func() {
 	})
 
 	Context("#Create", func() {
-		It("should not match on create event (no metadata)", func() {
-			Expect(predicate.Create(event.CreateEvent{
-				Meta:   nil,
-				Object: secret,
-			})).To(BeFalse())
-		})
-
 		It("should not match on create event (no finalizer)", func() {
 			Expect(predicate.Create(event.CreateEvent{
-				Meta:   &secret.ObjectMeta,
 				Object: secret,
 			})).To(BeFalse())
 		})
@@ -63,7 +55,6 @@ var _ = Describe("#HasFinalizer", func() {
 			secret.Finalizers = []string{"other"}
 
 			Expect(predicate.Create(event.CreateEvent{
-				Meta:   &secret.ObjectMeta,
 				Object: secret,
 			})).To(BeFalse())
 		})
@@ -72,27 +63,15 @@ var _ = Describe("#HasFinalizer", func() {
 			secret.Finalizers = []string{finalizer}
 
 			Expect(predicate.Create(event.CreateEvent{
-				Meta:   &secret.ObjectMeta,
 				Object: secret,
 			})).To(BeTrue())
 		})
 	})
 
 	Context("#Update", func() {
-		It("should not match on update event (no metadata)", func() {
-			Expect(predicate.Update(event.UpdateEvent{
-				MetaOld:   &secret.ObjectMeta,
-				ObjectOld: secret,
-				MetaNew:   &secret.ObjectMeta,
-				ObjectNew: secret,
-			})).To(BeFalse())
-		})
-
 		It("should not match on update event (no finalizer)", func() {
 			Expect(predicate.Update(event.UpdateEvent{
-				MetaOld:   nil,
 				ObjectOld: secret,
-				MetaNew:   nil,
 				ObjectNew: secret,
 			})).To(BeFalse())
 		})
@@ -101,9 +80,7 @@ var _ = Describe("#HasFinalizer", func() {
 			secret.Finalizers = []string{"other"}
 
 			Expect(predicate.Update(event.UpdateEvent{
-				MetaOld:   &secret.ObjectMeta,
 				ObjectOld: secret,
-				MetaNew:   &secret.ObjectMeta,
 				ObjectNew: secret,
 			})).To(BeFalse())
 		})
@@ -113,9 +90,7 @@ var _ = Describe("#HasFinalizer", func() {
 			secret.Finalizers = []string{finalizer}
 
 			Expect(predicate.Update(event.UpdateEvent{
-				MetaOld:   &secret.ObjectMeta,
 				ObjectOld: secret,
-				MetaNew:   &secretCopy.ObjectMeta,
 				ObjectNew: &secretCopy,
 			})).To(BeFalse())
 		})
@@ -125,9 +100,7 @@ var _ = Describe("#HasFinalizer", func() {
 			secret.Finalizers = []string{finalizer}
 
 			Expect(predicate.Update(event.UpdateEvent{
-				MetaOld:   &secretCopy.ObjectMeta,
 				ObjectOld: &secretCopy,
-				MetaNew:   &secret.ObjectMeta,
 				ObjectNew: secret,
 			})).To(BeTrue())
 		})
@@ -136,9 +109,7 @@ var _ = Describe("#HasFinalizer", func() {
 			secret.Finalizers = []string{finalizer}
 
 			Expect(predicate.Update(event.UpdateEvent{
-				MetaOld:   &secret.ObjectMeta,
 				ObjectOld: secret,
-				MetaNew:   &secret.ObjectMeta,
 				ObjectNew: secret,
 			})).To(BeTrue())
 		})
@@ -147,7 +118,6 @@ var _ = Describe("#HasFinalizer", func() {
 	Describe("#Delete", func() {
 		It("should not match on delete event", func() {
 			Expect(predicate.Delete(event.DeleteEvent{
-				Meta:   &secret.ObjectMeta,
 				Object: secret,
 			})).To(BeFalse())
 		})
@@ -156,7 +126,6 @@ var _ = Describe("#HasFinalizer", func() {
 	Describe("#Generic", func() {
 		It("should not match on generic event", func() {
 			Expect(predicate.Generic(event.GenericEvent{
-				Meta:   &secret.ObjectMeta,
 				Object: secret,
 			})).To(BeFalse())
 		})

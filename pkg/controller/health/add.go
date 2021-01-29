@@ -76,14 +76,14 @@ func AddToManagerWithOptions(mgr manager.Manager, conf ControllerConfig) error {
 		&handler.Funcs{
 			CreateFunc: func(e event.CreateEvent, q workqueue.RateLimitingInterface) {
 				q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
-					Name:      e.Meta.GetName(),
-					Namespace: e.Meta.GetNamespace(),
+					Name:      e.Object.GetName(),
+					Namespace: e.Object.GetNamespace(),
 				}})
 			},
 			UpdateFunc: func(e event.UpdateEvent, q workqueue.RateLimitingInterface) {
 				q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
-					Name:      e.MetaNew.GetName(),
-					Namespace: e.MetaNew.GetNamespace(),
+					Name:      e.ObjectNew.GetName(),
+					Namespace: e.ObjectNew.GetNamespace(),
 				}})
 			},
 		},

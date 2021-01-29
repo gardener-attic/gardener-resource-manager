@@ -15,8 +15,7 @@
 package predicate
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/sets"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -32,22 +31,12 @@ func HasFinalizer(finalizer string) predicate.Predicate {
 			// Create event is emitted on start-up, when the cache is populated from a complete list call for the first time.
 			// We should enqueue all secrets, which have the controller's finalizer in order to remove it in case we missed
 			// an important update event to a ManagedResource during downtime.
-			if e.Meta == nil {
-				log.Error(nil, "Create event has no object meta", "event", e)
-				return false
-			}
-
-			return metaHasFinalizer(e.Meta, finalizer)
+			return controllerutil.ContainsFinalizer(e.Object, finalizer)
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			// We only need to check MetaNew. If the finalizer was in MetaOld and is not in MetaNew, it is already
 			// removed and we don't need to reconcile the secret.
-			if e.MetaNew == nil {
-				log.Error(nil, "Update event has no new object meta", "event", e)
-				return false
-			}
-
-			return metaHasFinalizer(e.MetaNew, finalizer)
+			return controllerutil.ContainsFinalizer(e.ObjectNew, finalizer)
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			// If the secret is already deleted, all finalizers are already gone and we don't need to reconcile it.
@@ -57,8 +46,4 @@ func HasFinalizer(finalizer string) predicate.Predicate {
 			return false
 		},
 	}
-}
-
-func metaHasFinalizer(meta metav1.Object, finalizer string) bool {
-	return sets.NewString(meta.GetFinalizers()...).Has(finalizer)
 }
