@@ -25,6 +25,9 @@ import (
 	hvpav1alpha1 "github.com/gardener/hvpa-controller/api/v1alpha1"
 	"github.com/spf13/pflag"
 	"golang.org/x/time/rate"
+	corev1 "k8s.io/api/core/v1"
+	eventsv1 "k8s.io/api/events/v1"
+	eventsv1beta1 "k8s.io/api/events/v1beta1"
 	apiextensionsinstall "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/install"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -175,7 +178,13 @@ func newCachedClient(cache cache.Cache, config rest.Config, options client.Optio
 	config.QPS = 100.0
 	config.Burst = 130
 
-	return manager.NewClientBuilder().Build(cache, &config, options)
+	nonCachedObjects := []client.Object{
+		&corev1.Event{},
+		&eventsv1beta1.Event{},
+		&eventsv1.Event{},
+	}
+
+	return manager.NewClientBuilder().WithUncached(nonCachedObjects...).Build(cache, &config, options)
 }
 
 // Start starts the target cache if the client is cached.

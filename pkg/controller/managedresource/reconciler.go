@@ -31,6 +31,7 @@ import (
 	"github.com/gardener/gardener-resource-manager/pkg/controller/utils"
 	"github.com/gardener/gardener-resource-manager/pkg/filter"
 
+	kutil "github.com/gardener/gardener/pkg/utils/kubernetes"
 	hvpav1alpha1 "github.com/gardener/hvpa-controller/api/v1alpha1"
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -584,7 +585,7 @@ func annotationExistsAndValueTrue(meta metav1.Object, key string) bool {
 
 func (r *Reconciler) cleanOldResources(ctx context.Context, index *ObjectIndex, mr *resourcesv1alpha1.ManagedResource) (bool, error) {
 	type output struct {
-		resource        string
+		obj             client.Object
 		deletionPending bool
 		err             error
 	}
@@ -612,30 +613,30 @@ func (r *Reconciler) cleanOldResources(ctx context.Context, index *ObjectIndex, 
 				obj.SetName(ref.Name)
 
 				resource := unstructuredToString(obj)
-				r.log.Info("Deleting", "resource", resource)
+				r.log.Info("Deleting", "resource", unstructuredToString(obj))
 
 				// get object before deleting to be able to do cleanup work for it
 				if err := r.targetClient.Get(ctx, client.ObjectKey{Namespace: ref.Namespace, Name: ref.Name}, obj); err != nil {
 					if !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
 						r.log.Error(err, "Error during deletion", "resource", resource)
-						results <- &output{resource, true, err}
+						results <- &output{obj, true, err}
 						return
 					}
 
 					// resource already deleted, nothing to do here
-					results <- &output{resource, false, nil}
+					results <- &output{obj, false, nil}
 					return
 				}
 
 				if keepObject(obj) {
 					r.log.Info("Keeping object in the system as "+resourcesv1alpha1.KeepObject+" annotation found", "resource", unstructuredToString(obj))
-					results <- &output{resource, false, nil}
+					results <- &output{obj, false, nil}
 					return
 				}
 
 				if err := cleanup(ctx, r.targetClient, r.targetScheme, obj, deletePVCs); err != nil {
 					r.log.Error(err, "Error during cleanup", "resource", resource)
-					results <- &output{resource: resource, deletionPending: true, err: err}
+					results <- &output{obj, true, err}
 					return
 				}
 
@@ -654,13 +655,13 @@ func (r *Reconciler) cleanOldResources(ctx context.Context, index *ObjectIndex, 
 				if err := r.targetClient.Delete(ctx, obj, deleteOptions); err != nil {
 					if !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
 						r.log.Error(err, "Error during deletion", "resource", resource)
-						results <- &output{resource, true, err}
+						results <- &output{obj, true, err}
 						return
 					}
-					results <- &output{resource, false, nil}
+					results <- &output{obj, false, nil}
 					return
 				}
-				results <- &output{resource, true, nil}
+				results <- &output{obj, true, nil}
 			}(oldResource)
 		}
 	}
@@ -671,22 +672,48 @@ func (r *Reconciler) cleanOldResources(ctx context.Context, index *ObjectIndex, 
 	}()
 
 	for out := range results {
+		resource := unstructuredToString(out.obj)
 		if out.deletionPending {
 			deletionPending = true
-			errMsg := fmt.Sprintf("deletion of old resource %q is still pending", out.resource)
+			errMsg := fmt.Sprintf("deletion of old resource %q is still pending", resource)
 			if out.err != nil {
 				errMsg = fmt.Sprintf("%s: %v", errMsg, out.err)
 			}
+
+			// consult service events for more details
+			eventsMsg, err := eventsForObject(ctx, r.targetClient, out.obj)
+			if err != nil {
+				r.log.Error(err, "Error reading events for more information", "resource", resource)
+			} else if eventsMsg != "" {
+				errMsg = fmt.Sprintf("%s\n\n%s", errMsg, eventsMsg)
+			}
+
 			errorList = multierror.Append(errorList, errors.New(errMsg))
 			continue
 		}
 
 		if out.err != nil {
-			errorList = multierror.Append(errorList, fmt.Errorf("error during deletion of old resource %q: %w", out.resource, out.err))
+			errorList = multierror.Append(errorList, fmt.Errorf("error during deletion of old resource %q: %w", resource, out.err))
 		}
 	}
 
 	return deletionPending, errorList.ErrorOrNil()
+}
+
+func eventsForObject(ctx context.Context, c client.Client, obj client.Object) (string, error) {
+	var (
+		relevantGKs = []schema.GroupKind{
+			corev1.SchemeGroupVersion.WithKind("Service").GroupKind(),
+		}
+		eventLimit = 2
+	)
+
+	for _, gk := range relevantGKs {
+		if gk == obj.GetObjectKind().GroupVersionKind().GroupKind() {
+			return kutil.FetchEventMessages(ctx, c, obj, corev1.EventTypeWarning, eventLimit)
+		}
+	}
+	return "", nil
 }
 
 func tryUpdateManagedResourceStatus(
@@ -711,9 +738,10 @@ func tryUpdateManagedResourceConditions(ctx context.Context, c client.Client, mr
 	})
 }
 
-func unstructuredToString(o *unstructured.Unstructured) string {
+func unstructuredToString(o client.Object) string {
 	// return no key, but an description including the version
-	return objectKey(o.GetAPIVersion(), o.GetKind(), o.GetNamespace(), o.GetName())
+	apiVersion, kind := o.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
+	return objectKey(apiVersion, kind, o.GetNamespace(), o.GetName())
 }
 
 // injectLabels injects the given labels into the given object's metadata and if present also into the

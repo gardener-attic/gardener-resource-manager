@@ -3,7 +3,7 @@ module github.com/gardener/gardener-resource-manager
 go 1.15
 
 require (
-	github.com/gardener/gardener v1.16.0
+	github.com/gardener/gardener v1.16.1-0.20210129130130-fcbfecc8f499
 	github.com/gardener/gardener-resource-manager/api v0.0.0-00010101000000-000000000000
 	github.com/gardener/hvpa-controller v0.3.1
 	github.com/go-logr/logr v0.3.0
