@@ -35,6 +35,7 @@ spec:
         - --leader-election-lease-duration={{ .Values.leaderElection.leaseDuration }}
         - --leader-election-renew-deadline={{ .Values.leaderElection.renewDeadline }}
         - --leader-election-retry-period={{ .Values.leaderElection.retryPeriod }}
+        - --leader-election-id={{ include "leaderelectionid" . }}
         {{- if .Values.controllers.cacheResyncPeriod }}
         - --cache-resync-period={{ .Values.controllers.cacheResyncPeriod }}
         {{- end }}
