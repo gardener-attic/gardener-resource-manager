@@ -21,12 +21,12 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
 	resourcesv1alpha1helper "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1/helper"
+
 	"github.com/gardener/gardener-resource-manager/pkg/controller/utils"
 	"github.com/gardener/gardener-resource-manager/pkg/filter"
 
@@ -470,19 +470,6 @@ func (r *Reconciler) origin(mr *resourcesv1alpha1.ManagedResource) string {
 		return r.clusterID + ":" + mr.Namespace + "/" + mr.Name
 	}
 	return mr.Namespace + "/" + mr.Name
-}
-
-func MatchOrigin(origin, found string) bool {
-	if found == origin {
-		return true
-	}
-	parts := strings.Split(origin, ":")
-	if len(parts) > 1 {
-		// handle format migration for adding cluster-id later
-		fparts := strings.Split(found, ":")
-		return len(fparts) == 1 && parts[1] == found
-	}
-	return false
 }
 
 // computeAllScaledObjectKeys returns two sets containing object keys (in the form `Group/Kind/Namespace/Name`).

@@ -23,8 +23,12 @@ import (
 
 	extensionscontroller "github.com/gardener/gardener/extensions/pkg/controller"
 	extensionspredicate "github.com/gardener/gardener/extensions/pkg/predicate"
+	gardenerconstantsv1beta1 "github.com/gardener/gardener/pkg/apis/core/v1beta1/constants"
+	"github.com/go-logr/logr"
 	"github.com/spf13/pflag"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -33,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
+
 	resourcemanagercmd "github.com/gardener/gardener-resource-manager/pkg/cmd"
 	"github.com/gardener/gardener-resource-manager/pkg/filter"
 	"github.com/gardener/gardener-resource-manager/pkg/mapper"
@@ -68,16 +73,6 @@ type ControllerConfig struct {
 
 // AddToManagerWithOptions adds the controller to a Manager with the given config.
 func AddToManagerWithOptions(mgr manager.Manager, conf ControllerConfig) error {
-	if conf.ClusterID == "<cluster>" || conf.ClusterID == "<default>" {
-		mgr.GetLogger().Info("Trying to get cluster id from cluster")
-		tmpClient, err := client.New(mgr.GetConfig(), client.Options{})
-		if err == nil {
-			conf.ClusterID, err = determineClusterIdentity(tmpClient, conf.ClusterID == "<cluster>")
-		}
-		if err != nil {
-			return fmt.Errorf("unable to determine cluster id: %+v", err)
-		}
-	}
 	mgr.GetLogger().Info("Used cluster id: " + conf.ClusterID)
 	c, err := controller.New(ControllerName, mgr, controller.Options{
 		MaxConcurrentReconciles: conf.MaxConcurrentWorkers,
@@ -159,6 +154,21 @@ func (c *ControllerConfig) ApplyClassFilter(filter *filter.ClassFilter) {
 	*filter = *c.ClassFilter
 }
 
+// ApplyDefaultClusterId sets completes the cluster id according to a dedicated cluster access
+func (c *ControllerConfig) ApplyDefaultClusterId(log logr.Logger, restcfg *rest.Config) error {
+	if c.ClusterID == "<cluster>" || c.ClusterID == "<default>" {
+		log.Info("Trying to get cluster id from cluster")
+		tmpClient, err := client.New(restcfg, client.Options{})
+		if err == nil {
+			c.ClusterID, err = determineClusterIdentity(tmpClient, c.ClusterID == "<cluster>")
+		}
+		if err != nil {
+			return fmt.Errorf("unable to determine cluster id: %+v", err)
+		}
+	}
+	return nil
+}
+
 // determineClusterIdentity is used to extract the cluster identity from the cluster-identity
 // config map. This is intended as fallback if no explicit cluster identity is given.
 // in  seed-shoot scenario, the cluster id for the managed resources must be explicitly given
@@ -166,9 +176,9 @@ func (c *ControllerConfig) ApplyClassFilter(filter *filter.ClassFilter) {
 // be set.
 func determineClusterIdentity(c client.Client, force bool) (string, error) {
 	cm := corev1.ConfigMap{}
-	err := c.Get(context.Background(), client.ObjectKey{Name: "cluster-identity", Namespace: "kube-system"}, &cm)
+	err := c.Get(context.Background(), client.ObjectKey{Name: gardenerconstantsv1beta1.ClusterIdentity, Namespace: metav1.NamespaceSystem}, &cm)
 	if err == nil {
-		if id, ok := cm.Data["cluster-identity"]; ok {
+		if id, ok := cm.Data[gardenerconstantsv1beta1.ClusterIdentity]; ok {
 			return id, nil
 		}
 		if force {
