@@ -795,6 +795,11 @@ var _ = Describe("merger", func() {
 
 				expected = old.DeepCopy()
 			}),
+			Entry("LoadBalancer should retain spec.loadBalancerIP", func() {
+				old.Spec.LoadBalancerIP = "1.2.3.4"
+
+				expected = old.DeepCopy()
+			}),
 		)
 
 		DescribeTable("ExternalName to", func(mutator func()) {
