@@ -245,6 +245,7 @@ func mergeService(scheme *runtime.Scheme, oldObj, newObj runtime.Object) error {
 
 	switch newService.Spec.Type {
 	case corev1.ServiceTypeLoadBalancer, corev1.ServiceTypeNodePort:
+		// do not override ports
 		var ports []corev1.ServicePort
 
 		for _, np := range newService.Spec.Ports {
@@ -259,6 +260,11 @@ func mergeService(scheme *runtime.Scheme, oldObj, newObj runtime.Object) error {
 			ports = append(ports, p)
 		}
 		newService.Spec.Ports = ports
+
+		// do not override loadbalancer IP
+		if newService.Spec.LoadBalancerIP == "" && oldService.Spec.LoadBalancerIP != "" {
+			newService.Spec.LoadBalancerIP = oldService.Spec.LoadBalancerIP
+		}
 
 	case corev1.ServiceTypeExternalName:
 		// there is no ClusterIP in this case
