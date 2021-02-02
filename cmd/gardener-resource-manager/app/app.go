@@ -83,7 +83,7 @@ func NewResourceManagerCommand() *cobra.Command {
 			targetClientOpts.Completed().Apply(&healthControllerOpts.Completed().TargetClientConfig)
 			resourceControllerOpts.Completed().ApplyClassFilter(&secretControllerOpts.Completed().ClassFilter)
 			resourceControllerOpts.Completed().ApplyClassFilter(&healthControllerOpts.Completed().ClassFilter)
-			err := resourceControllerOpts.Completed().ApplyDefaultClusterId(entryLog, sourceClientOpts.Completed().RESTConfig)
+			err := resourceControllerOpts.Completed().ApplyDefaultClusterId(ctx, entryLog, sourceClientOpts.Completed().RESTConfig)
 			if err != nil {
 				return err
 			}

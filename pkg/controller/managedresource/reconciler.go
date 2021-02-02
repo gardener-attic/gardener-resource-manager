@@ -26,13 +26,13 @@ import (
 
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
 	resourcesv1alpha1helper "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1/helper"
+	"github.com/hashicorp/go-multierror"
 
 	"github.com/gardener/gardener-resource-manager/pkg/controller/utils"
 	"github.com/gardener/gardener-resource-manager/pkg/filter"
 
 	hvpav1alpha1 "github.com/gardener/hvpa-controller/api/v1alpha1"
 	"github.com/go-logr/logr"
-	"github.com/hashicorp/go-multierror"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
