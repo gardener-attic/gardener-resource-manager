@@ -15,16 +15,19 @@
 package health
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
 	"github.com/gardener/gardener-resource-manager/api/resources/v1alpha1/helper"
 
+	kutil "github.com/gardener/gardener/pkg/utils/kubernetes"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // CheckManagedResource checks if all conditions of a ManagedResource ('ResourcesApplied' and 'ResourcesHealthy')
@@ -244,7 +247,7 @@ func CheckReplicaSet(rs *appsv1.ReplicaSet) error {
 	return nil
 }
 
-// CheckReplicationController check whether the given ReplicationController is healthy.
+// CheckReplicationController checks whether the given ReplicationController is healthy.
 // A ReplicationController is considered healthy if the controller observed its current revision and
 // if the number of ready replicas is equal to the number of replicas.
 func CheckReplicationController(rc *corev1.ReplicationController) error {
@@ -258,6 +261,29 @@ func CheckReplicationController(rc *corev1.ReplicationController) error {
 	}
 
 	return nil
+}
+
+const eventLimit = 2
+
+// CheckService checks whether the given service is healthy.
+// A Service is considered unhealthy if it is of type `LoadBalancer` but doesn't have an ingress element in its status.
+func CheckService(ctx context.Context, c client.Client, service *corev1.Service) error {
+	if service.Spec.Type != corev1.ServiceTypeLoadBalancer {
+		return nil
+	}
+	if len(service.Status.LoadBalancer.Ingress) > 0 {
+		return nil
+	}
+	// consult service events for more information
+	noIngressMsg := "service is missing ingress status"
+	eventsMsg, err := kutil.FetchEventMessages(ctx, c, service, corev1.EventTypeWarning, eventLimit)
+	if err != nil {
+		return fmt.Errorf("%s but couldn't read events for more information: %s", noIngressMsg, err)
+	}
+	if eventsMsg != "" {
+		noIngressMsg = fmt.Sprintf("%s\n\n%s", noIngressMsg, eventsMsg)
+	}
+	return fmt.Errorf(noIngressMsg)
 }
 
 // CheckStatefulSet checks whether the given StatefulSet is healthy.

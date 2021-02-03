@@ -15,7 +15,10 @@
 package health
 
 import (
+	"context"
+
 	"github.com/gardener/gardener-resource-manager/pkg/health"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -28,7 +31,7 @@ import (
 
 // CheckHealth checks whether the given `runtime.Unstructured` is healthy.
 // `nil` is returned when the `runtime.Unstructured` has kind which is not supported by this function.
-func CheckHealth(scheme *runtime.Scheme, obj runtime.Object) error {
+func CheckHealth(ctx context.Context, c client.Client, scheme *runtime.Scheme, obj runtime.Object) error {
 	switch obj.GetObjectKind().GroupVersionKind().GroupKind() {
 	case apiextensionsv1.SchemeGroupVersion.WithKind("CustomResourceDefinition").GroupKind():
 		crdObj := obj
@@ -81,6 +84,12 @@ func CheckHealth(scheme *runtime.Scheme, obj runtime.Object) error {
 			return err
 		}
 		return health.CheckReplicationController(rc)
+	case corev1.SchemeGroupVersion.WithKind("Service").GroupKind():
+		service := &corev1.Service{}
+		if err := scheme.Convert(obj, service, nil); err != nil {
+			return err
+		}
+		return health.CheckService(ctx, c, service)
 	case appsv1.SchemeGroupVersion.WithKind("StatefulSet").GroupKind():
 		statefulSet := &appsv1.StatefulSet{}
 		if err := scheme.Convert(obj, statefulSet, nil); err != nil {

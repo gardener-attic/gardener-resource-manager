@@ -613,7 +613,7 @@ func (r *Reconciler) cleanOldResources(ctx context.Context, index *ObjectIndex, 
 				obj.SetName(ref.Name)
 
 				resource := unstructuredToString(obj)
-				r.log.Info("Deleting", "resource", unstructuredToString(obj))
+				r.log.Info("Deleting", "resource", resource)
 
 				// get object before deleting to be able to do cleanup work for it
 				if err := r.targetClient.Get(ctx, client.ObjectKey{Namespace: ref.Namespace, Name: ref.Name}, obj); err != nil {

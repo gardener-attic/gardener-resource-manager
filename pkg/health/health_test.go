@@ -15,11 +15,17 @@
 package health_test
 
 import (
+	"context"
+	"fmt"
 	"testing"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
 	"github.com/gardener/gardener-resource-manager/pkg/health"
+	mockclient "github.com/gardener/gardener-resource-manager/pkg/mock/controller-runtime/client"
 
+	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -480,6 +486,53 @@ var _ = Describe("health", func() {
 				Spec:   appsv1.StatefulSetSpec{Replicas: replicas(2)},
 				Status: appsv1.StatefulSetStatus{ReadyReplicas: 1},
 			}, HaveOccurred()),
+		)
+	})
+
+	Context("CheckService", func() {
+		var (
+			ctrl    *gomock.Controller
+			message = "foo"
+		)
+		BeforeEach(func() {
+			ctrl = gomock.NewController(GinkgoT())
+		})
+		AfterEach(func() {
+			ctrl.Finish()
+		})
+
+		DescribeTable("services",
+			func(service *corev1.Service, matcher types.GomegaMatcher) {
+				c := mockclient.NewMockClient(ctrl)
+
+				c.EXPECT().List(gomock.Any(), gomock.AssignableToTypeOf(&corev1.EventList{}), gomock.Any()).DoAndReturn(
+					func(_ context.Context, list *corev1.EventList, _ ...client.ListOption) error {
+						list.Items = []corev1.Event{
+							{Message: message},
+						}
+						return nil
+					},
+				).MaxTimes(1)
+				err := health.CheckService(context.Background(), c, service)
+				Expect(err).To(matcher)
+			},
+			Entry("no LoadBalancer service", &corev1.Service{
+				Spec: corev1.ServiceSpec{Type: corev1.ServiceTypeExternalName},
+			}, BeNil()),
+			Entry("LoadBalancer w/ ingress status", &corev1.Service{
+				Spec: corev1.ServiceSpec{Type: corev1.ServiceTypeLoadBalancer},
+				Status: corev1.ServiceStatus{
+					LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{
+							{Hostname: "foo.bar"},
+						},
+					},
+				},
+			}, BeNil()),
+			Entry("LoadBalancer w/o ingress status", &corev1.Service{
+				TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Service"},
+				Spec:     corev1.ServiceSpec{Type: corev1.ServiceTypeLoadBalancer},
+			}, MatchError(fmt.Sprintf("service is missing ingress status\n\n-> Events:\n*  reported <unknown> ago: %s", message))),
 		)
 	})
 })
