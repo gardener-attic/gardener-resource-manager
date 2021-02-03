@@ -3,6 +3,7 @@
 /local
 /bin
 /dev
+/cmd/gardener-resource-manager/controller
 **/dev
 
 *.coverprofile

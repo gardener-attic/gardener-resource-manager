@@ -54,3 +54,28 @@ The following section describes a healthy ManagedResource:
 In some cases it is not desirable to update or re-apply some of the cluster components (for example, if customization is required or needs to be applied by the end-user). 
 For these resources, the annotation "resources.gardener.cloud/ignore" needs to be set to "true" or a truthy value (Truthy values are "1", "t", "T", "true", "TRUE", "True") in the corresponding managed resource secrets, 
 this can be done from the components that create the managed resource secrets, for example Gardener extensions or Gardener. Once this is done, the resource will be initially created and later ignored during reconciliation.
+
+## Origin
+
+All the objects managed by the resource manager get a dedicated annotation 
+`resources.gardener.cloud/origin` describing the `ManagedResource` object that describes 
+ this object. 
+ 
+ By default this is in this format &lt;namespace&gt;/&lt;objectname&gt;.
+ In multi-cluster scenarios (the `ManagedResource` objects are maintained in a 
+ cluster different from the one the described objects are managed), it might
+ be useful to include the cluster identity, as well.
+ 
+ This can be enforced by setting the `--cluster-id` option. Here, several
+ possibilities are supported:
+ - given a direct value: use this as id for the source cluster
+ - `<cluster>`: read the cluster identity from a `cluster-identity` config map
+  in the `kube-system` namespace (attribute `cluster-identity`). This is 
+  automatically maintained in all clusters managed or involved in a gardener landscape.
+ - `<default>`: try to read the cluster identity from the config map. If not found,
+  no identity is used
+ - empty string: no cluster identity is used (completely cluster local scenarios)
+ 
+ The format of the origin annotation with a cluster id is &lt;cluster id&gt;:&lt;namespace&gt;/&lt;objectname&gt;.
+ 
+ The default for the cluster id is the empty value (do not use cluster id).

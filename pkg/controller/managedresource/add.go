@@ -15,15 +15,20 @@
 package managedresource
 
 import (
+	"context"
 	"fmt"
 	"time"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	extensionscontroller "github.com/gardener/gardener/extensions/pkg/controller"
 	extensionspredicate "github.com/gardener/gardener/extensions/pkg/predicate"
+	gardenerconstantsv1beta1 "github.com/gardener/gardener/pkg/apis/core/v1beta1/constants"
+	"github.com/go-logr/logr"
 	"github.com/spf13/pflag"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -31,11 +36,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
+
+	extensionshandler "github.com/gardener/gardener/extensions/pkg/handler"
+
 	resourcemanagercmd "github.com/gardener/gardener-resource-manager/pkg/cmd"
 	"github.com/gardener/gardener-resource-manager/pkg/filter"
 	"github.com/gardener/gardener-resource-manager/pkg/mapper"
 	managerpredicate "github.com/gardener/gardener-resource-manager/pkg/predicate"
-	extensionshandler "github.com/gardener/gardener/extensions/pkg/handler"
 )
 
 // ControllerName is the name of the managedresource controller.
@@ -50,6 +57,7 @@ type ControllerOptions struct {
 	syncPeriod           time.Duration
 	resourceClass        string
 	alwaysUpdate         bool
+	clusterID            string
 }
 
 // ControllerConfig is the completed configuration for the controller.
@@ -58,12 +66,14 @@ type ControllerConfig struct {
 	SyncPeriod           time.Duration
 	ClassFilter          *filter.ClassFilter
 	AlwaysUpdate         bool
+	ClusterID            string
 
 	TargetClientConfig resourcemanagercmd.TargetClientConfig
 }
 
 // AddToManagerWithOptions adds the controller to a Manager with the given config.
 func AddToManagerWithOptions(mgr manager.Manager, conf ControllerConfig) error {
+	mgr.GetLogger().Info("Used cluster id: " + conf.ClusterID)
 	c, err := controller.New(ControllerName, mgr, controller.Options{
 		MaxConcurrentReconciles: conf.MaxConcurrentWorkers,
 		Reconciler: extensionscontroller.OperationAnnotationWrapper(
@@ -75,6 +85,7 @@ func AddToManagerWithOptions(mgr manager.Manager, conf ControllerConfig) error {
 				class:            conf.ClassFilter,
 				alwaysUpdate:     conf.AlwaysUpdate,
 				syncPeriod:       conf.SyncPeriod,
+				clusterID:        conf.ClusterID,
 			},
 		),
 	})
@@ -113,6 +124,7 @@ func (o *ControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.IntVar(&o.maxConcurrentWorkers, "max-concurrent-workers", 10, "number of worker threads for concurrent reconciliation of resources")
 	fs.DurationVar(&o.syncPeriod, "sync-period", time.Minute, "duration how often existing resources should be synced")
 	fs.StringVar(&o.resourceClass, "resource-class", filter.DefaultClass, "resource class used to filter resource resources")
+	fs.StringVar(&o.clusterID, "cluster-id", "", "optional cluster id for source cluster")
 	fs.BoolVar(&o.alwaysUpdate, "always-update", false, "if set to false then a resource will only be updated if its desired state differs from the actual state. otherwise, an update request will be always sent.")
 }
 
@@ -127,6 +139,7 @@ func (o *ControllerOptions) Complete() error {
 		SyncPeriod:           o.syncPeriod,
 		ClassFilter:          filter.NewClassFilter(o.resourceClass),
 		AlwaysUpdate:         o.alwaysUpdate,
+		ClusterID:            o.clusterID,
 	}
 	return nil
 }
@@ -139,4 +152,42 @@ func (o *ControllerOptions) Completed() *ControllerConfig {
 // ApplyClassFilter sets filter to the ClassFilter of this config.
 func (c *ControllerConfig) ApplyClassFilter(filter *filter.ClassFilter) {
 	*filter = *c.ClassFilter
+}
+
+// ApplyDefaultClusterId sets the cluster id according to a dedicated cluster access
+func (c *ControllerConfig) ApplyDefaultClusterId(ctx context.Context, log logr.Logger, restcfg *rest.Config) error {
+	if c.ClusterID == "<cluster>" || c.ClusterID == "<default>" {
+		log.Info("Trying to get cluster id from cluster")
+		tmpClient, err := client.New(restcfg, client.Options{})
+		if err == nil {
+			c.ClusterID, err = determineClusterIdentity(ctx, tmpClient, c.ClusterID == "<cluster>")
+		}
+		if err != nil {
+			return fmt.Errorf("unable to determine cluster id: %+v", err)
+		}
+	}
+	return nil
+}
+
+// determineClusterIdentity is used to extract the cluster identity from the cluster-identity
+// config map. This is intended as fallback if no explicit cluster identity is given.
+// in  seed-shoot scenario, the cluster id for the managed resources must be explicitly given
+// to support the migration of a shoot from one seed to another. Here the identity `seed` should
+// be set.
+func determineClusterIdentity(ctx context.Context, c client.Client, force bool) (string, error) {
+	cm := corev1.ConfigMap{}
+	err := c.Get(ctx, client.ObjectKey{Name: gardenerconstantsv1beta1.ClusterIdentity, Namespace: metav1.NamespaceSystem}, &cm)
+	if err == nil {
+		if id, ok := cm.Data[gardenerconstantsv1beta1.ClusterIdentity]; ok {
+			return id, nil
+		}
+		if force {
+			return "", fmt.Errorf("cannot determine cluster identity from configmap: no cluster-identity entry ")
+		}
+	} else {
+		if force || !apierrors.IsNotFound(err) {
+			return "", fmt.Errorf("cannot determine cluster identity from configmap: %s", err)
+		}
+	}
+	return "", nil
 }
