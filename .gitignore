@@ -23,3 +23,7 @@ TODO
 *-packr.go
 
 /controller
+
+# GitGuardian
+.cache_ggshield
+.gitguardian.yaml

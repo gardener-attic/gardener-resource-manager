@@ -150,7 +150,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			return ctrl.Result{}, err
 		}
 
-		if err := CheckHealth(r.targetScheme, obj); err != nil {
+		if err := CheckHealth(ctx, r.targetClient, r.targetScheme, obj); err != nil {
 			var (
 				reason  = ref.Kind + "Unhealthy"
 				message = fmt.Sprintf("Required %s %q in namespace %q is unhealthy: %v", ref.Kind, ref.Name, ref.Namespace, err.Error())
