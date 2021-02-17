@@ -60,9 +60,6 @@ func (r *Reconciler) InjectLogger(l logr.Logger) error {
 
 // Reconcile performs health checks.
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx, cancel := context.WithTimeout(ctx, time.Minute)
-	defer cancel()
-
 	log := r.log.WithValues("object", req)
 	log.Info("Starting ManagedResource health checks")
 
@@ -80,6 +77,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		log.Info("Stopping health checks as the responsibility changed")
 		return ctrl.Result{}, nil // Do not requeue
 	}
+
+	healthCheckCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
 
 	// Initialize condition based on the current status.
 	conditionResourcesHealthy := resourcesv1alpha1helper.GetOrInitCondition(mr.Status.Conditions, resourcesv1alpha1.ResourcesHealthy)
@@ -130,7 +130,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			}
 		}
 
-		if err := r.targetClient.Get(ctx, client.ObjectKey{Namespace: ref.Namespace, Name: ref.Name}, obj); err != nil {
+		if err := r.targetClient.Get(healthCheckCtx, client.ObjectKey{Namespace: ref.Namespace, Name: ref.Name}, obj); err != nil {
 			if apierrors.IsNotFound(err) {
 				log.Info("Could not get object", "namespace", ref.Namespace, "name", ref.Name)
 
@@ -150,7 +150,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			return ctrl.Result{}, err
 		}
 
-		if err := CheckHealth(ctx, r.targetClient, r.targetScheme, obj); err != nil {
+		if err := CheckHealth(healthCheckCtx, r.targetClient, r.targetScheme, obj); err != nil {
 			var (
 				reason  = ref.Kind + "Unhealthy"
 				message = fmt.Sprintf("Required %s %q in namespace %q is unhealthy: %v", ref.Kind, ref.Name, ref.Namespace, err.Error())

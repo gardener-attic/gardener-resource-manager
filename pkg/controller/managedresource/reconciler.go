@@ -90,9 +90,6 @@ func (r *Reconciler) InjectLogger(l logr.Logger) error {
 
 // Reconcile implements `reconcile.Reconciler`.
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx, cancel := context.WithTimeout(ctx, time.Minute)
-	defer cancel()
-
 	log := r.log.WithValues("object", req)
 
 	mr := &resourcesv1alpha1.ManagedResource{}
@@ -150,12 +147,15 @@ func (r *Reconciler) reconcile(ctx context.Context, mr *resourcesv1alpha1.Manage
 		forceOverwriteAnnotations = *v
 	}
 
+	reconcileCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
 	// Initialize condition based on the current status.
 	conditionResourcesApplied := resourcesv1alpha1helper.GetOrInitCondition(mr.Status.Conditions, resourcesv1alpha1.ResourcesApplied)
 
 	for _, ref := range mr.Spec.SecretRefs {
 		secret := &corev1.Secret{}
-		if err := r.client.Get(ctx, client.ObjectKey{Namespace: mr.Namespace, Name: ref.Name}, secret); err != nil {
+		if err := r.client.Get(reconcileCtx, client.ObjectKey{Namespace: mr.Namespace, Name: ref.Name}, secret); err != nil {
 			conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, "CannotReadSecret", err.Error())
 			if err := tryUpdateManagedResourceConditions(ctx, r.client, mr, conditionResourcesApplied); err != nil {
 				return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v ", err)
@@ -269,7 +269,7 @@ func (r *Reconciler) reconcile(ctx context.Context, mr *resourcesv1alpha1.Manage
 		}
 	}
 
-	if deletionPending, err := r.cleanOldResources(ctx, existingResourcesIndex, mr); err != nil {
+	if deletionPending, err := r.cleanOldResources(reconcileCtx, existingResourcesIndex, mr); err != nil {
 		var (
 			reason string
 			status resourcesv1alpha1.ConditionStatus
@@ -296,7 +296,7 @@ func (r *Reconciler) reconcile(ctx context.Context, mr *resourcesv1alpha1.Manage
 		}
 	}
 
-	if err := r.applyNewResources(ctx, origin, newResourcesObjects, mr.Spec.InjectLabels, equivalences); err != nil {
+	if err := r.applyNewResources(reconcileCtx, origin, newResourcesObjects, mr.Spec.InjectLabels, equivalences); err != nil {
 		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, resourcesv1alpha1.ConditionApplyFailed, err.Error())
 		if err := tryUpdateManagedResourceConditions(ctx, r.client, mr, conditionResourcesApplied); err != nil {
 			return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v", err)
@@ -322,6 +322,9 @@ func (r *Reconciler) reconcile(ctx context.Context, mr *resourcesv1alpha1.Manage
 func (r *Reconciler) delete(ctx context.Context, mr *resourcesv1alpha1.ManagedResource, log logr.Logger) (ctrl.Result, error) {
 	log.Info("Starting to delete ManagedResource")
 
+	deleteCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
 	conditionResourcesApplied := resourcesv1alpha1helper.GetOrInitCondition(mr.Status.Conditions, resourcesv1alpha1.ResourcesApplied)
 
 	if keepObjects := mr.Spec.KeepObjects; keepObjects == nil || !*keepObjects {
@@ -338,7 +341,7 @@ func (r *Reconciler) delete(ctx context.Context, mr *resourcesv1alpha1.ManagedRe
 			return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v", err)
 		}
 
-		if deletionPending, err := r.cleanOldResources(ctx, existingResourcesIndex, mr); err != nil {
+		if deletionPending, err := r.cleanOldResources(deleteCtx, existingResourcesIndex, mr); err != nil {
 			var (
 				reason string
 				status resourcesv1alpha1.ConditionStatus
