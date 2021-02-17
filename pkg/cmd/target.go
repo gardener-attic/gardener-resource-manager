@@ -23,6 +23,7 @@ import (
 	"time"
 
 	hvpav1alpha1 "github.com/gardener/hvpa-controller/api/v1alpha1"
+	volumesnapshotv1beta1 "github.com/kubernetes-csi/external-snapshotter/v2/pkg/apis/volumesnapshot/v1beta1"
 	"github.com/spf13/pflag"
 	"golang.org/x/time/rate"
 	corev1 "k8s.io/api/core/v1"
@@ -141,6 +142,7 @@ func getTargetScheme() *runtime.Scheme {
 	apiextensionsinstall.Install(scheme)
 	apiregistrationinstall.Install(scheme)
 	utilruntime.Must(hvpav1alpha1.AddToScheme(scheme))
+	utilruntime.Must(volumesnapshotv1beta1.AddToScheme(scheme))
 
 	return scheme
 }
