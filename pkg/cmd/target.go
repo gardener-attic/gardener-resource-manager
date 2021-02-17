@@ -91,6 +91,10 @@ func (o *TargetClientOptions) Complete() error {
 		targetClient client.Client
 	)
 
+	// TODO: make this configurable
+	restConfig.QPS = 100.0
+	restConfig.Burst = 130
+
 	if o.disableCache {
 		// create direct client for target cluster
 		targetClient, err = client.New(restConfig, client.Options{
@@ -176,17 +180,14 @@ func getTargetRESTConfig(kubeconfigPath string) (*rest.Config, error) {
 }
 
 func newCachedClient(cache cache.Cache, config rest.Config, options client.Options) (client.Client, error) {
-	// TODO: make this configurable
-	config.QPS = 100.0
-	config.Burst = 130
-
-	nonCachedObjects := []client.Object{
-		&corev1.Event{},
-		&eventsv1beta1.Event{},
-		&eventsv1.Event{},
-	}
-
-	return manager.NewClientBuilder().WithUncached(nonCachedObjects...).Build(cache, &config, options)
+	return manager.
+		NewClientBuilder().
+		WithUncached(
+			&corev1.Event{},
+			&eventsv1beta1.Event{},
+			&eventsv1.Event{},
+		).
+		Build(cache, &config, options)
 }
 
 // Start starts the target cache if the client is cached.
