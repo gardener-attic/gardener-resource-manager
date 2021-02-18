@@ -19,10 +19,10 @@ import (
 	"time"
 
 	"github.com/spf13/pflag"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
+	kubernetesscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -90,7 +90,7 @@ func (o *SourceClientOptions) Completed() *SourceClientConfig {
 
 func getSourceScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
-	utilruntime.Must(corev1.AddToScheme(scheme))
+	utilruntime.Must(kubernetesscheme.AddToScheme(scheme))
 	utilruntime.Must(resourcesv1alpha1.AddToScheme(scheme))
 	return scheme
 }
