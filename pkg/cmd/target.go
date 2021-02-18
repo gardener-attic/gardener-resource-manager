@@ -73,6 +73,10 @@ func (o *TargetClientOptions) Complete() error {
 		return fmt.Errorf("unable to create REST config for target cluster: %w", err)
 	}
 
+	// TODO: make this configurable
+	restConfig.QPS = 100.0
+	restConfig.Burst = 130
+
 	restMapper, err := getTargetRESTMapper(restConfig)
 	if err != nil {
 		return fmt.Errorf("unable to create REST mapper for target cluster: %w", err)
@@ -146,7 +150,7 @@ func getTargetRESTMapper(config *rest.Config) (meta.RESTMapper, error) {
 	return apiutil.NewDynamicRESTMapper(
 		config,
 		apiutil.WithLazyDiscovery,
-		apiutil.WithLimiter(rate.NewLimiter(rate.Every(10*time.Second), 1)), // rediscover at maximum every 10s
+		apiutil.WithLimiter(rate.NewLimiter(rate.Every(1*time.Minute), 1)), // rediscover at maximum every minute
 	)
 }
 
@@ -169,9 +173,6 @@ func getTargetRESTConfig(kubeconfigPath string) (*rest.Config, error) {
 }
 
 func newCachedClient(cache cache.Cache, config rest.Config, options client.Options) (client.Client, error) {
-	config.QPS = 100.0
-	config.Burst = 130
-
 	// Create the Client for Write operations.
 	c, err := client.New(&config, options)
 	if err != nil {
