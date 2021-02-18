@@ -17,6 +17,8 @@ package main
 import (
 	"os"
 
+	"k8s.io/client-go/rest"
+
 	"github.com/gardener/gardener-resource-manager/cmd/gardener-resource-manager/app"
 	"github.com/gardener/gardener-resource-manager/pkg/log"
 
@@ -25,6 +27,13 @@ import (
 )
 
 func main() {
+	rest.SetDefaultWarningHandler(
+		rest.NewWarningWriter(os.Stderr, rest.WarningWriterOptions{
+			// only print a given warning the first time we receive it
+			Deduplicate: true,
+		}),
+	)
+
 	runtimelog.SetLogger(log.ZapLogger(false))
 	ctx := signals.SetupSignalHandler()
 
