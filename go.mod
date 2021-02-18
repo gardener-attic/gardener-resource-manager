@@ -9,6 +9,7 @@ require (
 	github.com/go-logr/logr v0.1.0
 	github.com/golang/mock v1.4.4-0.20200731163441-8734ec565a4d
 	github.com/hashicorp/go-multierror v1.0.0
+	github.com/kubernetes-csi/external-snapshotter/v2 v2.1.4
 	github.com/onsi/ginkgo v1.14.0
 	github.com/onsi/gomega v1.10.1
 	github.com/spf13/cobra v0.0.6
