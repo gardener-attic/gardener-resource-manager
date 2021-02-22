@@ -3,15 +3,17 @@ module github.com/gardener/gardener-resource-manager
 go 1.15
 
 require (
-	github.com/gardener/gardener v1.16.1-0.20210129130130-fcbfecc8f499
+	github.com/Masterminds/goutils v1.1.1 // indirect
+	github.com/gardener/gardener v1.17.1-0.20210223090907-928a806b2a30
 	github.com/gardener/gardener-resource-manager/api v0.0.0-00010101000000-000000000000
 	github.com/gardener/hvpa-controller v0.3.1
 	github.com/go-logr/logr v0.3.0
 	github.com/golang/mock v1.4.4-0.20200731163441-8734ec565a4d
 	github.com/hashicorp/go-multierror v1.0.0
 	github.com/kubernetes-csi/external-snapshotter/v2 v2.1.4
+	github.com/mitchellh/copystructure v1.1.1 // indirect
 	github.com/onsi/ginkgo v1.14.1
-	github.com/onsi/gomega v1.10.2
+	github.com/onsi/gomega v1.10.5
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
 	go.uber.org/zap v1.15.0
