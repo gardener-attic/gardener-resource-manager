@@ -32,6 +32,7 @@ spec:
         - /gardener-resource-manager
         - --leader-election={{ .Values.leaderElection.enabled }}
         - --leader-election-namespace={{ .Release.Namespace }}
+        - --leader-election-resource-lock={{ .Values.leaderElection.resourceLock }}
         - --leader-election-lease-duration={{ .Values.leaderElection.leaseDuration }}
         - --leader-election-renew-deadline={{ .Values.leaderElection.renewDeadline }}
         - --leader-election-retry-period={{ .Values.leaderElection.retryPeriod }}

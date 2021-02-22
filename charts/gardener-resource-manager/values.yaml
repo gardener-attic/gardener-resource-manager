@@ -20,6 +20,7 @@ controllers:
 
 leaderElection:
   enabled: true
+  resourceLock: configmapsleases
   leaseDuration: 15s
   renewDeadline: 10s
   retryPeriod: 2s
