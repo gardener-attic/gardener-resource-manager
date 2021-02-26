@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"testing"
 
+	kubernetesscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
@@ -504,6 +505,7 @@ var _ = Describe("health", func() {
 		DescribeTable("services",
 			func(service *corev1.Service, matcher types.GomegaMatcher) {
 				c := mockclient.NewMockClient(ctrl)
+				c.EXPECT().Scheme().Return(kubernetesscheme.Scheme).AnyTimes()
 
 				c.EXPECT().List(gomock.Any(), gomock.AssignableToTypeOf(&corev1.EventList{}), gomock.Any()).DoAndReturn(
 					func(_ context.Context, list *corev1.EventList, _ ...client.ListOption) error {

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/spf13/pflag"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -29,6 +30,7 @@ type ManagerOptions struct {
 	healthBindAddress  string
 
 	leaderElection              bool
+	leaderElectionResourceLock  string
 	leaderElectionNamespace     string
 	leaderElectionLeaseDuration time.Duration
 	leaderElectionRenewDeadline time.Duration
@@ -44,6 +46,7 @@ type ManagerConfig struct {
 	livenessEndpointName string
 
 	leaderElection              bool
+	leaderElectionResourceLock  string
 	leaderElectionID            string
 	leaderElectionNamespace     string
 	leaderElectionLeaseDuration time.Duration
@@ -53,7 +56,14 @@ type ManagerConfig struct {
 
 // AddFlags adds the needed command line flags to the given FlagSet.
 func (o *ManagerOptions) AddFlags(fs *pflag.FlagSet) {
+	// TODO: migrate default to `leases` in one of the next releases
+	// `configmapsleases` has been default since v0.22 (but was not configurable via flags)
+	// maybe consider changing the default in v0.24?
+	defaultLeaderElectionResourceLock := resourcelock.ConfigMapsLeasesResourceLock
+
 	fs.BoolVar(&o.leaderElection, "leader-election", true, "enable or disable leader election")
+	fs.StringVar(&o.leaderElectionResourceLock, "leader-election-resource-lock", defaultLeaderElectionResourceLock, "Which resource type to use for leader election. "+
+		"Supported options are 'endpoints', 'configmaps', 'leases', 'endpointsleases' and 'configmapsleases'.")
 	fs.StringVar(&o.leaderElectionNamespace, "leader-election-namespace", "", "namespace for leader election")
 	fs.DurationVar(&o.leaderElectionLeaseDuration, "leader-election-lease-duration", 15*time.Second, "lease duration for leader election")
 	fs.DurationVar(&o.leaderElectionRenewDeadline, "leader-election-renew-deadline", 10*time.Second, "renew deadline for leader election")
@@ -66,6 +76,7 @@ func (o *ManagerOptions) AddFlags(fs *pflag.FlagSet) {
 func (o *ManagerOptions) Complete() error {
 	o.completed = &ManagerConfig{
 		leaderElection:              o.leaderElection,
+		leaderElectionResourceLock:  o.leaderElectionResourceLock,
 		leaderElectionID:            "gardener-resource-manager",
 		leaderElectionNamespace:     o.leaderElectionNamespace,
 		leaderElectionLeaseDuration: o.leaderElectionLeaseDuration,
@@ -86,6 +97,7 @@ func (o *ManagerOptions) Completed() *ManagerConfig {
 // Apply sets the values of this ManagerConfig on the given manager.Options.
 func (c *ManagerConfig) Apply(opts *manager.Options) {
 	opts.LeaderElection = c.leaderElection
+	opts.LeaderElectionResourceLock = c.leaderElectionResourceLock
 	opts.LeaderElectionID = c.leaderElectionID
 	opts.LeaderElectionNamespace = c.leaderElectionNamespace
 	opts.LeaseDuration = &c.leaderElectionLeaseDuration
