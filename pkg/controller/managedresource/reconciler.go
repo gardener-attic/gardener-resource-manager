@@ -129,6 +129,7 @@ func (r *Reconciler) reconcile(ctx context.Context, mr *resourcesv1alpha1.Manage
 	var (
 		newResourcesObjects          []object
 		newResourcesObjectReferences []resourcesv1alpha1.ObjectReference
+		orphanedObjectReferences     []resourcesv1alpha1.ObjectReference
 
 		equivalences           = NewEquivalences(mr.Spec.Equivalences...)
 		existingResourcesIndex = NewObjectIndex(mr.Status.Resources, equivalences)
@@ -235,8 +236,19 @@ func (r *Reconciler) reconcile(ctx context.Context, mr *resourcesv1alpha1.Manage
 					}
 				)
 
-				newObj.oldInformation, _ = existingResourcesIndex.Lookup(objectReference)
+				var found bool
+				newObj.oldInformation, found = existingResourcesIndex.Lookup(objectReference)
 				decodedObj = nil
+
+				if ignoreMode(obj) {
+					if found {
+						orphanedObjectReferences = append(orphanedObjectReferences, objectReference)
+					}
+
+					log.Info(fmt.Sprintf("Skipping object %s '%s/%s', as it is annotated with %s=%s",
+						obj.GetKind(), obj.GetNamespace(), obj.GetName(), resourcesv1alpha1.Mode, resourcesv1alpha1.ModeIgnore))
+					continue
+				}
 
 				newResourcesObjects = append(newResourcesObjects, newObj)
 				newResourcesObjectReferences = append(newResourcesObjectReferences, objectReference)
@@ -294,6 +306,15 @@ func (r *Reconciler) reconcile(ctx context.Context, mr *resourcesv1alpha1.Manage
 		} else {
 			return ctrl.Result{}, err
 		}
+	}
+
+	if err := r.releaseOrphanedResources(ctx, orphanedObjectReferences, origin); err != nil {
+		conditionResourcesApplied = resourcesv1alpha1helper.UpdatedCondition(conditionResourcesApplied, resourcesv1alpha1.ConditionFalse, resourcesv1alpha1.ReleaseOfOrphanedResourcesFailed, err.Error())
+		if err := tryUpdateManagedResourceConditions(ctx, r.client, mr, conditionResourcesApplied); err != nil {
+			return ctrl.Result{}, fmt.Errorf("could not update the ManagedResource status: %+v", err)
+		}
+
+		return ctrl.Result{}, fmt.Errorf("could not release all orphaned resources: %+v", err)
 	}
 
 	if err := r.applyNewResources(reconcileCtx, origin, newResourcesObjects, mr.Spec.InjectLabels, equivalences); err != nil {
@@ -564,6 +585,11 @@ func objectKeyFromUnstructured(o *unstructured.Unstructured) string {
 	return objectKey(o.GroupVersionKind().Group, o.GetKind(), o.GetNamespace(), o.GetName())
 }
 
+func ignoreMode(meta metav1.Object) bool {
+	annotations := meta.GetAnnotations()
+	return annotations[resourcesv1alpha1.Mode] == resourcesv1alpha1.ModeIgnore
+}
+
 func ignore(meta metav1.Object) bool {
 	return annotationExistsAndValueTrue(meta, resourcesv1alpha1.Ignore)
 }
@@ -701,6 +727,84 @@ func (r *Reconciler) cleanOldResources(ctx context.Context, index *ObjectIndex, 
 	}
 
 	return deletionPending, errorList.ErrorOrNil()
+}
+
+func (r *Reconciler) releaseOrphanedResources(ctx context.Context, orphanedResources []resourcesv1alpha1.ObjectReference, origin string) error {
+	var (
+		results   = make(chan error)
+		wg        sync.WaitGroup
+		errorList = &multierror.Error{
+			ErrorFormat: utils.NewErrorFormatFuncWithPrefix("Could not release all orphaned resources"),
+		}
+	)
+
+	for _, orphanedResource := range orphanedResources {
+		wg.Add(1)
+
+		go func(ref resourcesv1alpha1.ObjectReference) {
+			defer wg.Done()
+
+			err := r.releaseOrphanedResource(ctx, ref, origin)
+			results <- err
+
+		}(orphanedResource)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	for err := range results {
+		if err != nil {
+			errorList = multierror.Append(errorList, err)
+		}
+	}
+
+	return errorList.ErrorOrNil()
+}
+
+func (r *Reconciler) releaseOrphanedResource(ctx context.Context, ref resourcesv1alpha1.ObjectReference, origin string) error {
+	obj := &unstructured.Unstructured{}
+	obj.SetAPIVersion(ref.APIVersion)
+	obj.SetKind(ref.Kind)
+	obj.SetNamespace(ref.Namespace)
+	obj.SetName(ref.Name)
+
+	resource := unstructuredToString(obj)
+
+	r.log.Info("Releasing orphan resource", "resource", resource)
+
+	if err := r.targetClient.Get(ctx, client.ObjectKey{Namespace: ref.Namespace, Name: ref.Name}, obj); err != nil {
+		if !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+			return fmt.Errorf("error getting object %q: %w", resource, err)
+		}
+
+		return nil
+	}
+
+	// Skip the release of resource when the origin annotation has already changed
+	objOrigin := obj.GetAnnotations()[originAnnotation]
+	if objOrigin != origin {
+		r.log.Info("Skipping release for orphan resource as origin annotation has already changed", "resource", resource)
+		return nil
+	}
+
+	oldObj := obj.DeepCopy()
+	annotations := obj.GetAnnotations()
+	delete(annotations, originAnnotation)
+	delete(annotations, descriptionAnnotation)
+	obj.SetAnnotations(annotations)
+
+	if err := r.targetClient.Patch(ctx, obj, client.MergeFrom(oldObj)); err != nil {
+		if !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+			return fmt.Errorf("error patching object %q: %w", resource, err)
+		}
+
+		return nil
+	}
+
+	return nil
 }
 
 func eventsForObject(ctx context.Context, c client.Client, obj client.Object) (string, error) {

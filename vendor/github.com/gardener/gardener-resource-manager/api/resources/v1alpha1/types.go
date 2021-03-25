@@ -30,6 +30,13 @@ const (
 	// true then the controller will not delete the object in case it is removed from the ManagedResource or the
 	// ManagedResource itself is deleted.
 	KeepObject = "resources.gardener.cloud/keep-object"
+	// Mode is a constant for an annotation on a resource managed by a ManagedResource. It indicates the
+	// mode that should be used to reconcile the resource.
+	Mode = "resources.gardener.cloud/mode"
+	// ModeIgnore is a constant for the value of the mode annotation describing an ignore mode.
+	// Reconciliation in ignore more removes the resource from the ManagedResource status and does not
+	// perform any action on the cluster.
+	ModeIgnore = "Ignore"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -146,8 +153,11 @@ const (
 	// because deleting the resources failed.
 	ConditionDeletionFailed = "DeletionFailed"
 	// ConditionDeletionPending indicates that the `ResourcesApplied` condition is `Progressing`,
-	// because the deletion of some resources are still pending.
+	// because the deletion of some resources is still pending.
 	ConditionDeletionPending = "DeletionPending"
+	// ReleaseOfOrphanedResourcesFailed indicates that the `ResourcesApplied` condition is `False`,
+	// because the release of orphaned resources failed.
+	ReleaseOfOrphanedResourcesFailed = "ReleaseOfOrphanedResourcesFailed"
 	// ConditionHealthChecksPending indicates that the `ResourcesHealthy` condition is `Unknown`,
 	// because the health checks have not been completely executed yet for the current set of resources.
 	ConditionHealthChecksPending = "HealthChecksPending"
