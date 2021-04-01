@@ -1,5 +1,14 @@
 # Managed Resource
 
+### Modes
+
+The gardener-resource-manager can manage a resource in different modes. The supported modes are:
+- `Ignore`
+  - The corresponding resource is removed from the ManagedResource status (`.status.resources`). No action is performed on the cluster - the resource is no longer "managed" (updated or deleted).
+  - The primary use case is a migration of a resource from one ManagedResource to another one.
+
+The mode for a resource can be specified with the `resources.gardener.cloud/mode` annotation. The annotation should be specified in the encoded resource manifest in the Secret that is referenced by the ManagedResource.
+
 ### Resource Class
 
 By default gardener-resource-manager controller watches for ManagedResources in all namespaces. `--namespace` flag can be specified to gardener-resource-manager binary to restrict the watch to ManagedResources in a single namespace.
@@ -49,13 +58,13 @@ The following section describes a healthy ManagedResource:
 ]  
 ```
 
-## Ignoring Updates 
+### Ignoring Updates 
 
 In some cases it is not desirable to update or re-apply some of the cluster components (for example, if customization is required or needs to be applied by the end-user). 
 For these resources, the annotation "resources.gardener.cloud/ignore" needs to be set to "true" or a truthy value (Truthy values are "1", "t", "T", "true", "TRUE", "True") in the corresponding managed resource secrets, 
 this can be done from the components that create the managed resource secrets, for example Gardener extensions or Gardener. Once this is done, the resource will be initially created and later ignored during reconciliation.
 
-## Origin
+### Origin
 
 All the objects managed by the resource manager get a dedicated annotation 
 `resources.gardener.cloud/origin` describing the `ManagedResource` object that describes 
