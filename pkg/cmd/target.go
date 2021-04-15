@@ -26,6 +26,7 @@ import (
 	volumesnapshotv1beta1 "github.com/kubernetes-csi/external-snapshotter/v2/pkg/apis/volumesnapshot/v1beta1"
 	"github.com/spf13/pflag"
 	"golang.org/x/time/rate"
+	networkingistiov1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	eventsv1 "k8s.io/api/events/v1"
 	eventsv1beta1 "k8s.io/api/events/v1beta1"
@@ -147,6 +148,7 @@ func getTargetScheme() *runtime.Scheme {
 	apiregistrationinstall.Install(scheme)
 	utilruntime.Must(hvpav1alpha1.AddToScheme(scheme))
 	utilruntime.Must(volumesnapshotv1beta1.AddToScheme(scheme))
+	utilruntime.Must(networkingistiov1beta1.AddToScheme(scheme))
 
 	return scheme
 }
