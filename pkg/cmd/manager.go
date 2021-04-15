@@ -56,13 +56,8 @@ type ManagerConfig struct {
 
 // AddFlags adds the needed command line flags to the given FlagSet.
 func (o *ManagerOptions) AddFlags(fs *pflag.FlagSet) {
-	// TODO: migrate default to `leases` in one of the next releases
-	// `configmapsleases` has been default since v0.22 (but was not configurable via flags)
-	// maybe consider changing the default in v0.24?
-	defaultLeaderElectionResourceLock := resourcelock.ConfigMapsLeasesResourceLock
-
 	fs.BoolVar(&o.leaderElection, "leader-election", true, "enable or disable leader election")
-	fs.StringVar(&o.leaderElectionResourceLock, "leader-election-resource-lock", defaultLeaderElectionResourceLock, "Which resource type to use for leader election. "+
+	fs.StringVar(&o.leaderElectionResourceLock, "leader-election-resource-lock", resourcelock.LeasesResourceLock, "Which resource type to use for leader election. "+
 		"Supported options are 'endpoints', 'configmaps', 'leases', 'endpointsleases' and 'configmapsleases'.")
 	fs.StringVar(&o.leaderElectionNamespace, "leader-election-namespace", "", "namespace for leader election")
 	fs.DurationVar(&o.leaderElectionLeaseDuration, "leader-election-lease-duration", 15*time.Second, "lease duration for leader election")
