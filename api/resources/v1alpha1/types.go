@@ -37,6 +37,13 @@ const (
 	// Reconciliation in ignore more removes the resource from the ManagedResource status and does not
 	// perform any action on the cluster.
 	ModeIgnore = "Ignore"
+	// PreserveReplicas is a constant for an annotation on a resource managed by a ManagedResource. If set to
+	// true then the controller will keep the `spec.replicas` field's value during updates to the resource.
+	PreserveReplicas = "gardener-resource-manager.gardener.cloud/preserve-replicas"
+	// PreserveResources is a constant for an annotation on a resource managed by a ManagedResource. If set to
+	// true then the controller will keep the resource requests and limits in Pod templates (e.g. in a
+	// DeploymentSpec) during updates to the resource.
+	PreserveResources = "gardener-resource-manager.gardener.cloud/preserve-resources"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

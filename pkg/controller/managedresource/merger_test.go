@@ -321,6 +321,124 @@ var _ = Describe("merger", func() {
 		})
 	})
 
+	Describe("#mergeDeploymentAnnotations", func() {
+		origin := "test:a/b"
+		var (
+			old, new, expected *appsv1.Deployment
+			s                  *runtime.Scheme
+			current, desired   = &unstructured.Unstructured{}, &unstructured.Unstructured{}
+		)
+
+		BeforeEach(func() {
+			s = runtime.NewScheme()
+			Expect(appsv1.AddToScheme(s)).ToNot(HaveOccurred(), "schema add should succeed")
+
+			old = &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{},
+				},
+				Spec: appsv1.DeploymentSpec{
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"controller-uid": "1a2b3c"},
+					},
+					Replicas: pointer.Int32Ptr(1),
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name: "foo-container",
+									Resources: corev1.ResourceRequirements{
+										Requests: corev1.ResourceList{
+											corev1.ResourceCPU:    resource.MustParse("50m"),
+											corev1.ResourceMemory: resource.MustParse("150Mi"),
+										},
+										Limits: corev1.ResourceList{
+											corev1.ResourceCPU:    resource.MustParse("500m"),
+											corev1.ResourceMemory: resource.MustParse("1Gi"),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			new = old.DeepCopy()
+			expected = old.DeepCopy()
+		})
+
+		It("should use new .spec.replicas if preserve-replicas is unset", func() {
+			new.Spec.Replicas = pointer.Int32Ptr(2)
+
+			Expect(s.Convert(old, current, nil)).Should(Succeed())
+			Expect(s.Convert(new, desired, nil)).Should(Succeed())
+
+			Expect(merge(origin, desired, current, false, nil, false, nil, false, false)).To(Succeed(), "merge should be successful")
+			Expect(s.Convert(current, expected, nil)).Should(Succeed())
+
+			Expect(expected.Spec.Replicas).To(Equal(new.Spec.Replicas))
+		})
+
+		It("should not overwrite old .spec.replicas if preserve-replicas is true", func() {
+			new.Spec.Replicas = pointer.Int32Ptr(2)
+			new.ObjectMeta.Annotations["gardener-resource-manager.gardener.cloud/preserve-replicas"] = "true"
+
+			Expect(s.Convert(old, current, nil)).Should(Succeed())
+			Expect(s.Convert(new, desired, nil)).Should(Succeed())
+
+			Expect(merge(origin, desired, current, false, nil, false, nil, false, false)).To(Succeed(), "merge should be successful")
+			Expect(s.Convert(current, expected, nil)).Should(Succeed())
+			Expect(expected.Spec.Replicas).To(Equal(old.Spec.Replicas))
+		})
+
+		It("should use new .spec.template.spec.resources if preserve-resources is unset", func() {
+			new.Spec.Template.Spec.Containers[0].Resources = corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("60m"),
+					corev1.ResourceMemory: resource.MustParse("180Mi"),
+				},
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("600m"),
+					corev1.ResourceMemory: resource.MustParse("1.2Gi"),
+				},
+			}
+
+			Expect(s.Convert(old, current, nil)).Should(Succeed())
+			Expect(s.Convert(new, desired, nil)).Should(Succeed())
+
+			Expect(merge(origin, desired, current, false, nil, false, nil, false, false)).To(Succeed(), "merge should be successful")
+			Expect(s.Convert(current, expected, nil)).Should(Succeed())
+
+			Expect(new.Spec.Template.Spec.Containers[0].Resources.Requests["cpu"].Equal(expected.Spec.Template.Spec.Containers[0].Resources.Requests["cpu"])).To(BeTrue())
+			Expect(new.Spec.Template.Spec.Containers[0].Resources.Requests["memory"].Equal(expected.Spec.Template.Spec.Containers[0].Resources.Requests["memory"])).To(BeTrue())
+			Expect(new.Spec.Template.Spec.Containers[0].Resources.Limits["cpu"].Equal(expected.Spec.Template.Spec.Containers[0].Resources.Limits["cpu"])).To(BeTrue())
+			Expect(new.Spec.Template.Spec.Containers[0].Resources.Limits["memory"].Equal(expected.Spec.Template.Spec.Containers[0].Resources.Limits["memory"])).To(BeTrue())
+		})
+
+		It("should not overwrite .spec.template.spec.resources if preserve-resources is true", func() {
+			new.Spec.Template.Spec.Containers[0].Resources = corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("60m"),
+					corev1.ResourceMemory: resource.MustParse("180Mi"),
+				},
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("600m"),
+					corev1.ResourceMemory: resource.MustParse("1.2Gi"),
+				},
+			}
+
+			new.ObjectMeta.Annotations["gardener-resource-manager.gardener.cloud/preserve-resources"] = "true"
+
+			Expect(s.Convert(old, current, nil)).Should(Succeed())
+			Expect(s.Convert(new, desired, nil)).Should(Succeed())
+
+			Expect(merge(origin, desired, current, false, nil, false, nil, false, false)).To(Succeed(), "merge should be successful")
+			Expect(s.Convert(current, expected, nil)).Should(Succeed())
+			Expect(expected.Spec.Template.Spec.Containers[0].Resources).To(Equal(old.Spec.Template.Spec.Containers[0].Resources))
+		})
+	})
+
 	Describe("#mergeStatefulset", func() {
 		var (
 			old, new *appsv1.StatefulSet
