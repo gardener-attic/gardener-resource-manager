@@ -539,6 +539,22 @@ func computeAllScaledObjectKeys(ctx context.Context, c client.Client) (horizonta
 		}
 	}
 
+	gvkArray := []schema.GroupVersionKind{{"apps", "v1", "Deployment"}, {"apps", "v1", "StatefulSet"}, {"apps", "v1", "DaemonSet"}}
+	for _, gvk := range gvkArray {
+		ul := &unstructured.UnstructuredList{}
+		ul.SetGroupVersionKind(gvk)
+		if err := c.List(ctx, ul); err != nil && !meta.IsNoMatchError(err) {
+			return horizontallyScaledObjects, verticallyScaledObjects, fmt.Errorf("failed to list all Unstructured objects: %w", err)
+		}
+
+		for _, u := range ul.Items {
+			if u.GetAnnotations() != nil && u.GetAnnotations()["gardener-resource-manager.gardener.cloud/preserveResources"] == "true" {
+				key := objectKey(u.GroupVersionKind().Group, u.GroupVersionKind().Kind, u.GetNamespace(), u.GetName())
+				verticallyScaledObjects.Insert(key)
+			}
+		}
+	}
+
 	return horizontallyScaledObjects, verticallyScaledObjects, nil
 }
 
