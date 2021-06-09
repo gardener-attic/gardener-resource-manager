@@ -30,20 +30,15 @@ const (
 	descriptionAnnotationText = `DO NOT EDIT - This resource is managed by gardener-resource-manager.
 Any modifications are discarded and the resource is returned to the original state.`
 
-	originAnnotation = "resources.gardener.cloud/origin"
+	originAnnotation       = "resources.gardener.cloud/origin"
+	annotationKeyReplicas  = "gardener-resource-manager.gardener.cloud/preserveReplicas"
+	annotationKeyResources = "gardener-resource-manager.gardener.cloud/preserveResources"
 )
 
 // merge merges the values of the `desired` object into the `current` object while preserving `current`'s important
 // metadata (like resourceVersion and finalizers), status and selected spec fields of the respective kind (e.g.
 // .spec.selector of a Job).
 func merge(origin string, desired, current *unstructured.Unstructured, forceOverwriteLabels bool, existingLabels map[string]string, forceOverwriteAnnotations bool, existingAnnotations map[string]string, preserveReplicas, preserveResources bool) error {
-
-	if desired.GetAnnotations()["gardener-resource-manager.gardener.cloud/preserveReplicas"] == "true" {
-		preserveReplicas = true
-	}
-	if desired.GetAnnotations()["gardener-resource-manager.gardener.cloud/preserveResources"] == "true" {
-		preserveResources = true
-	}
 
 	// save copy of current object before merging
 	oldObject := current.DeepCopy()
@@ -97,6 +92,14 @@ func merge(origin string, desired, current *unstructured.Unstructured, forceOver
 		newObject.Object["status"] = oldStatus
 	} else {
 		delete(newObject.Object, "status")
+	}
+
+	annotations := desired.GetAnnotations()
+	if annotations != nil && annotations[annotationKeyReplicas] == "true" {
+		preserveReplicas = true
+	}
+	if annotations != nil && annotations[annotationKeyResources] == "true" {
+		preserveResources = true
 	}
 
 	switch newObject.GroupVersionKind().GroupKind() {
