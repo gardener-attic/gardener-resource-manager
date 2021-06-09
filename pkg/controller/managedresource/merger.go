@@ -38,9 +38,10 @@ Any modifications are discarded and the resource is returned to the original sta
 // .spec.selector of a Job).
 func merge(origin string, desired, current *unstructured.Unstructured, forceOverwriteLabels bool, existingLabels map[string]string, forceOverwriteAnnotations bool, existingAnnotations map[string]string, preserveReplicas, preserveResources bool) error {
 
-	if annotations := desired.GetAnnotations(); annotations != nil && annotations["gardener-resource-manager.gardener.cloud/preserveReplicas"] == "true" {
+	if desired.GetAnnotations()["gardener-resource-manager.gardener.cloud/preserveReplicas"] == "true" {
 		preserveReplicas = true
-	} else if annotations != nil && annotations["gardener-resource-manager.gardener.cloud/preserveResources"] == "true" {
+	}
+	if desired.GetAnnotations()["gardener-resource-manager.gardener.cloud/preserveResources"] == "true" {
 		preserveResources = true
 	}
 
