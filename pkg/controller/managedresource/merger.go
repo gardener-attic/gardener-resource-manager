@@ -95,10 +95,10 @@ func merge(origin string, desired, current *unstructured.Unstructured, forceOver
 	}
 
 	annotations := desired.GetAnnotations()
-	if annotations != nil && annotations[annotationKeyReplicas] == "true" {
+	if annotations[annotationKeyReplicas] == "true" {
 		preserveReplicas = true
 	}
-	if annotations != nil && annotations[annotationKeyResources] == "true" {
+	if annotations[annotationKeyResources] == "true" {
 		preserveResources = true
 	}
 
