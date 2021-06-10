@@ -15,6 +15,7 @@
 package managedresource
 
 import (
+	v1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -30,9 +31,7 @@ const (
 	descriptionAnnotationText = `DO NOT EDIT - This resource is managed by gardener-resource-manager.
 Any modifications are discarded and the resource is returned to the original state.`
 
-	originAnnotation       = "resources.gardener.cloud/origin"
-	annotationKeyReplicas  = "gardener-resource-manager.gardener.cloud/preserveReplicas"
-	annotationKeyResources = "gardener-resource-manager.gardener.cloud/preserveResources"
+	originAnnotation = "resources.gardener.cloud/origin"
 )
 
 // merge merges the values of the `desired` object into the `current` object while preserving `current`'s important
@@ -95,10 +94,10 @@ func merge(origin string, desired, current *unstructured.Unstructured, forceOver
 	}
 
 	annotations := desired.GetAnnotations()
-	if annotations[annotationKeyReplicas] == "true" {
+	if annotations[v1alpha1.AnnotationKeyReplicas] == "true" {
 		preserveReplicas = true
 	}
-	if annotations[annotationKeyResources] == "true" {
+	if annotations[v1alpha1.AnnotationKeyResources] == "true" {
 		preserveResources = true
 	}
 

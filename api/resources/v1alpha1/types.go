@@ -37,7 +37,10 @@ const (
 	// Reconciliation in ignore more removes the resource from the ManagedResource status and does not
 	// perform any action on the cluster.
 	ModeIgnore = "Ignore"
-)
+	// annotation keys for preserved replicas
+	AnnotationKeyReplicas  = "gardener-resource-manager.gardener.cloud/preserveReplicas"
+	// annotation keys for preserved resources
+	AnnotationKeyResources = "gardener-resource-manager.gardener.cloud/preserveResources"
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
