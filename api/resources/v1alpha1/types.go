@@ -37,7 +37,8 @@ const (
 	// Reconciliation in ignore more removes the resource from the ManagedResource status and does not
 	// perform any action on the cluster.
 	ModeIgnore = "Ignore"
-	// annotation keys for preserved replicas
+	// AnnotationKeyReplicas is a constant for an annotation on a resource managed by a ManagedResource. If set to
+	// true then the controller will keep the `spec.replicas` field's value during updates to the resource.
 	AnnotationKeyReplicas  = "gardener-resource-manager.gardener.cloud/preserveReplicas"
 	// annotation keys for preserved resources
 	AnnotationKeyResources = "gardener-resource-manager.gardener.cloud/preserveResources"
