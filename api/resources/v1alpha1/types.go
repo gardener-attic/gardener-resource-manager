@@ -40,7 +40,9 @@ const (
 	// AnnotationKeyReplicas is a constant for an annotation on a resource managed by a ManagedResource. If set to
 	// true then the controller will keep the `spec.replicas` field's value during updates to the resource.
 	AnnotationKeyReplicas  = "gardener-resource-manager.gardener.cloud/preserveReplicas"
-	// annotation keys for preserved resources
+	// AnnotationKeyResources is a constant for an annotation on a resource managed by a ManagedResource. If set to
+	// true then the controller will keep the resourc requests and limits in Pod templates (e.g. in a
+	// DeploymentSpec) during updates to the resource.
 	AnnotationKeyResources = "gardener-resource-manager.gardener.cloud/preserveResources"
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
