@@ -370,8 +370,8 @@ var _ = Describe("merger", func() {
 
 			expected := new.DeepCopy()
 
-			s.Convert(old, current, nil)
-			s.Convert(new, desired, nil)
+			Expect(s.Convert(old, current, nil)).Should(Succeed())
+			Expect(s.Convert(new, desired, nil)).Should(Succeed())
 
 			Expect(merge(origin, desired, current, false, nil, false, nil, false, false)).To(Succeed(), "merge should be successful")
 			Expect(new).To(Equal(expected))
@@ -383,8 +383,8 @@ var _ = Describe("merger", func() {
 
 			expected := old.DeepCopy()
 
-			s.Convert(old, current, nil)
-			s.Convert(new, desired, nil)
+			Expect(s.Convert(old, current, nil)).Should(Succeed())
+			Expect(s.Convert(new, desired, nil)).Should(Succeed())
 
 			Expect(merge(origin, desired, current, false, nil, false, nil, false, false)).To(Succeed(), "merge should be successful")
 			Expect(new).To(Equal(expected))
@@ -404,8 +404,8 @@ var _ = Describe("merger", func() {
 
 			expected := old.DeepCopy()
 
-			s.Convert(old, current, nil)
-			s.Convert(new, desired, nil)
+			Expect(s.Convert(old, current, nil)).Should(Succeed())
+			Expect(s.Convert(new, desired, nil)).Should(Succeed())
 
 			Expect(merge(origin, desired, current, false, nil, false, nil, false, false)).To(Succeed(), "merge should be successful")
 			Expect(new).To(Equal(expected))
@@ -427,8 +427,8 @@ var _ = Describe("merger", func() {
 
 			expected := old.DeepCopy()
 
-			s.Convert(old, current, nil)
-			s.Convert(new, desired, nil)
+			Expect(s.Convert(old, current, nil)).Should(Succeed())
+			Expect(s.Convert(new, desired, nil)).Should(Succeed())
 
 			Expect(merge(origin, desired, current, false, nil, false, nil, false, false)).To(Succeed(), "merge should be successful")
 			Expect(new).To(Equal(expected))
