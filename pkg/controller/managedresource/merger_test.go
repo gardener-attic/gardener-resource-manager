@@ -324,9 +324,9 @@ var _ = Describe("merger", func() {
 	Describe("#mergeDeploymentAnnotations", func() {
 		origin := "test:a/b"
 		var (
-			old, new         *appsv1.Deployment
-			s                *runtime.Scheme
-			current, desired *unstructured.Unstructured
+			old, new, expected *appsv1.Deployment
+			s                  *runtime.Scheme
+			current, desired   = &unstructured.Unstructured{}, &unstructured.Unstructured{}
 		)
 
 		BeforeEach(func() {
@@ -334,7 +334,9 @@ var _ = Describe("merger", func() {
 			Expect(appsv1.AddToScheme(s)).ToNot(HaveOccurred(), "schema add should succeed")
 
 			old = &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{},
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{},
+				},
 				Spec: appsv1.DeploymentSpec{
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{"controller-uid": "1a2b3c"},
@@ -363,31 +365,31 @@ var _ = Describe("merger", func() {
 			}
 
 			new = old.DeepCopy()
+			expected = old.DeepCopy()
 		})
 
 		It("should use new .spec.replicas if preserveReplicas is false", func() {
 			new.Spec.Replicas = pointer.Int32Ptr(2)
 
-			expected := new.DeepCopy()
-
 			Expect(s.Convert(old, current, nil)).Should(Succeed())
 			Expect(s.Convert(new, desired, nil)).Should(Succeed())
 
 			Expect(merge(origin, desired, current, false, nil, false, nil, false, false)).To(Succeed(), "merge should be successful")
-			Expect(new).To(Equal(expected))
+			Expect(s.Convert(current, expected, nil)).Should(Succeed())
+
+			Expect(expected.Spec.Replicas).To(Equal(new.Spec.Replicas))
 		})
 
 		It("should not overwrite old .spec.replicas if preserveReplicas is true", func() {
 			new.Spec.Replicas = pointer.Int32Ptr(2)
-			new.ObjectMeta.Annotations["gardener-resource-manager.gardener.cloud/preserveResources"] = "true"
-
-			expected := old.DeepCopy()
+			new.ObjectMeta.Annotations["gardener-resource-manager.gardener.cloud/preserveReplicas"] = "true"
 
 			Expect(s.Convert(old, current, nil)).Should(Succeed())
 			Expect(s.Convert(new, desired, nil)).Should(Succeed())
 
 			Expect(merge(origin, desired, current, false, nil, false, nil, false, false)).To(Succeed(), "merge should be successful")
-			Expect(new).To(Equal(expected))
+			Expect(s.Convert(current, expected, nil)).Should(Succeed())
+			Expect(expected.Spec.Replicas).To(Equal(old.Spec.Replicas))
 		})
 
 		It("should use new .spec.template.spec.resources if preserveResources is false", func() {
@@ -402,13 +404,19 @@ var _ = Describe("merger", func() {
 				},
 			}
 
-			expected := old.DeepCopy()
-
 			Expect(s.Convert(old, current, nil)).Should(Succeed())
 			Expect(s.Convert(new, desired, nil)).Should(Succeed())
 
 			Expect(merge(origin, desired, current, false, nil, false, nil, false, false)).To(Succeed(), "merge should be successful")
-			Expect(new).To(Equal(expected))
+			Expect(s.Convert(current, expected, nil)).Should(Succeed())
+
+			// val := new.Spec.Template.Spec.Containers[0].Resources.Requests.Cpu().AsDec().Cmp(expected.Spec.Template.Spec.Containers[0].Resources.Requests.Cpu().AsDec())
+			// Expect(expected.Spec.Template.Spec.Containers[0].Resources).To(Equal(new.Spec.Template.Spec.Containers[0].Resources))
+			// Expect(val).To(Equal(0))
+			Expect(new.Spec.Template.Spec.Containers[0].Resources.Requests["cpu"].Equal(expected.Spec.Template.Spec.Containers[0].Resources.Requests["cpu"])).To(BeTrue())
+			Expect(new.Spec.Template.Spec.Containers[0].Resources.Requests["memory"].Equal(expected.Spec.Template.Spec.Containers[0].Resources.Requests["memory"])).To(BeTrue())
+			Expect(new.Spec.Template.Spec.Containers[0].Resources.Limits["cpu"].Equal(expected.Spec.Template.Spec.Containers[0].Resources.Limits["cpu"])).To(BeTrue())
+			Expect(new.Spec.Template.Spec.Containers[0].Resources.Limits["memory"].Equal(expected.Spec.Template.Spec.Containers[0].Resources.Limits["memory"])).To(BeTrue())
 		})
 
 		It("should not overwrite .spec.template.spec.resources if preserveResources is true", func() {
@@ -425,13 +433,12 @@ var _ = Describe("merger", func() {
 
 			new.ObjectMeta.Annotations["gardener-resource-manager.gardener.cloud/preserveResources"] = "true"
 
-			expected := old.DeepCopy()
-
 			Expect(s.Convert(old, current, nil)).Should(Succeed())
 			Expect(s.Convert(new, desired, nil)).Should(Succeed())
 
 			Expect(merge(origin, desired, current, false, nil, false, nil, false, false)).To(Succeed(), "merge should be successful")
-			Expect(new).To(Equal(expected))
+			Expect(s.Convert(current, expected, nil)).Should(Succeed())
+			Expect(expected.Spec.Template.Spec.Containers[0].Resources).To(Equal(old.Spec.Template.Spec.Containers[0].Resources))
 		})
 	})
 
