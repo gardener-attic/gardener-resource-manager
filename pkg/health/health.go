@@ -276,7 +276,7 @@ func CheckService(ctx context.Context, c client.Client, service *corev1.Service)
 	}
 	// consult service events for more information
 	noIngressMsg := "service is missing ingress status"
-	eventsMsg, err := kutil.FetchEventMessages(ctx, c, service, corev1.EventTypeWarning, eventLimit)
+	eventsMsg, err := kutil.FetchEventMessages(ctx, c.Scheme(), c, service, corev1.EventTypeWarning, eventLimit)
 	if err != nil {
 		return fmt.Errorf("%s but couldn't read events for more information: %s", noIngressMsg, err)
 	}

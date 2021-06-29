@@ -817,7 +817,7 @@ func eventsForObject(ctx context.Context, c client.Client, obj client.Object) (s
 
 	for _, gk := range relevantGKs {
 		if gk == obj.GetObjectKind().GroupVersionKind().GroupKind() {
-			return kutil.FetchEventMessages(ctx, c, obj, corev1.EventTypeWarning, eventLimit)
+			return kutil.FetchEventMessages(ctx, c.Scheme(), c, obj, corev1.EventTypeWarning, eventLimit)
 		}
 	}
 	return "", nil
