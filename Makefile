@@ -15,6 +15,7 @@
 NAME              := gardener-resource-manager
 IMAGE_REPOSITORY  := eu.gcr.io/gardener-project/gardener/$(NAME)
 REPO_ROOT         := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+HACK_DIR          := $(REPO_ROOT)/hack
 VERSION           := $(shell cat "$(REPO_ROOT)/VERSION")
 EFFECTIVE_VERSION := $(VERSION)-$(shell git rev-parse HEAD)
 
@@ -79,6 +80,7 @@ revendor:
 	@chmod +x $(REPO_ROOT)/vendor/github.com/gardener/gardener/hack/*
 	@chmod +x $(REPO_ROOT)/vendor/github.com/gardener/gardener/hack/.ci/*
 	@$(REPO_ROOT)/hack/update-github-templates.sh
+	@ln -sf ../vendor/github.com/gardener/gardener/hack/cherry-pick-pull.sh $(HACK_DIR)/cherry-pick-pull.sh
 
 .PHONY: clean
 clean:
