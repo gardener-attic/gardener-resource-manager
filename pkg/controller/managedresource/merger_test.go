@@ -410,9 +410,6 @@ var _ = Describe("merger", func() {
 			Expect(merge(origin, desired, current, false, nil, false, nil, false, false)).To(Succeed(), "merge should be successful")
 			Expect(s.Convert(current, expected, nil)).Should(Succeed())
 
-			// val := new.Spec.Template.Spec.Containers[0].Resources.Requests.Cpu().AsDec().Cmp(expected.Spec.Template.Spec.Containers[0].Resources.Requests.Cpu().AsDec())
-			// Expect(expected.Spec.Template.Spec.Containers[0].Resources).To(Equal(new.Spec.Template.Spec.Containers[0].Resources))
-			// Expect(val).To(Equal(0))
 			Expect(new.Spec.Template.Spec.Containers[0].Resources.Requests["cpu"].Equal(expected.Spec.Template.Spec.Containers[0].Resources.Requests["cpu"])).To(BeTrue())
 			Expect(new.Spec.Template.Spec.Containers[0].Resources.Requests["memory"].Equal(expected.Spec.Template.Spec.Containers[0].Resources.Requests["memory"])).To(BeTrue())
 			Expect(new.Spec.Template.Spec.Containers[0].Resources.Limits["cpu"].Equal(expected.Spec.Template.Spec.Containers[0].Resources.Limits["cpu"])).To(BeTrue())
