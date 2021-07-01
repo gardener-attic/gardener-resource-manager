@@ -368,7 +368,7 @@ var _ = Describe("merger", func() {
 			expected = old.DeepCopy()
 		})
 
-		It("should use new .spec.replicas if preserveReplicas is false", func() {
+		It("should use new .spec.replicas if preserve-replicas is unset", func() {
 			new.Spec.Replicas = pointer.Int32Ptr(2)
 
 			Expect(s.Convert(old, current, nil)).Should(Succeed())
@@ -380,9 +380,9 @@ var _ = Describe("merger", func() {
 			Expect(expected.Spec.Replicas).To(Equal(new.Spec.Replicas))
 		})
 
-		It("should not overwrite old .spec.replicas if preserveReplicas is true", func() {
+		It("should not overwrite old .spec.replicas if preserve-replicas is true", func() {
 			new.Spec.Replicas = pointer.Int32Ptr(2)
-			new.ObjectMeta.Annotations["gardener-resource-manager.gardener.cloud/preserveReplicas"] = "true"
+			new.ObjectMeta.Annotations["gardener-resource-manager.gardener.cloud/preserve-replicas"] = "true"
 
 			Expect(s.Convert(old, current, nil)).Should(Succeed())
 			Expect(s.Convert(new, desired, nil)).Should(Succeed())
@@ -392,7 +392,7 @@ var _ = Describe("merger", func() {
 			Expect(expected.Spec.Replicas).To(Equal(old.Spec.Replicas))
 		})
 
-		It("should use new .spec.template.spec.resources if preserveResources is false", func() {
+		It("should use new .spec.template.spec.resources if preserve-resources is unset", func() {
 			new.Spec.Template.Spec.Containers[0].Resources = corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
 					corev1.ResourceCPU:    resource.MustParse("60m"),
@@ -416,7 +416,7 @@ var _ = Describe("merger", func() {
 			Expect(new.Spec.Template.Spec.Containers[0].Resources.Limits["memory"].Equal(expected.Spec.Template.Spec.Containers[0].Resources.Limits["memory"])).To(BeTrue())
 		})
 
-		It("should not overwrite .spec.template.spec.resources if preserveResources is true", func() {
+		It("should not overwrite .spec.template.spec.resources if preserve-resources is true", func() {
 			new.Spec.Template.Spec.Containers[0].Resources = corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
 					corev1.ResourceCPU:    resource.MustParse("60m"),
@@ -428,7 +428,7 @@ var _ = Describe("merger", func() {
 				},
 			}
 
-			new.ObjectMeta.Annotations["gardener-resource-manager.gardener.cloud/preserveResources"] = "true"
+			new.ObjectMeta.Annotations["gardener-resource-manager.gardener.cloud/preserve-resources"] = "true"
 
 			Expect(s.Convert(old, current, nil)).Should(Succeed())
 			Expect(s.Convert(new, desired, nil)).Should(Succeed())

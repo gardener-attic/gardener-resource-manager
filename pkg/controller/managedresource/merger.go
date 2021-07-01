@@ -39,7 +39,6 @@ Any modifications are discarded and the resource is returned to the original sta
 // metadata (like resourceVersion and finalizers), status and selected spec fields of the respective kind (e.g.
 // .spec.selector of a Job).
 func merge(origin string, desired, current *unstructured.Unstructured, forceOverwriteLabels bool, existingLabels map[string]string, forceOverwriteAnnotations bool, existingAnnotations map[string]string, preserveReplicas, preserveResources bool) error {
-
 	// save copy of current object before merging
 	oldObject := current.DeepCopy()
 
@@ -95,10 +94,10 @@ func merge(origin string, desired, current *unstructured.Unstructured, forceOver
 	}
 
 	annotations := desired.GetAnnotations()
-	if annotations[resourcesv1alpha1.AnnotationKeyReplicas] == "true" {
+	if annotations[resourcesv1alpha1.PreserveReplicas] == "true" {
 		preserveReplicas = true
 	}
-	if annotations[resourcesv1alpha1.AnnotationKeyResources] == "true" {
+	if annotations[resourcesv1alpha1.PreserveResources] == "true" {
 		preserveResources = true
 	}
 
