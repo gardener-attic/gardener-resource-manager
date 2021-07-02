@@ -382,7 +382,7 @@ var _ = Describe("merger", func() {
 
 		It("should not overwrite old .spec.replicas if preserve-replicas is true", func() {
 			new.Spec.Replicas = pointer.Int32Ptr(2)
-			new.ObjectMeta.Annotations["gardener-resource-manager.gardener.cloud/preserve-replicas"] = "true"
+			new.ObjectMeta.Annotations["resources.gardener.cloud/preserve-replicas"] = "true"
 
 			Expect(s.Convert(old, current, nil)).Should(Succeed())
 			Expect(s.Convert(new, desired, nil)).Should(Succeed())
@@ -428,7 +428,7 @@ var _ = Describe("merger", func() {
 				},
 			}
 
-			new.ObjectMeta.Annotations["gardener-resource-manager.gardener.cloud/preserve-resources"] = "true"
+			new.ObjectMeta.Annotations["resources.gardener.cloud/preserve-resources"] = "true"
 
 			Expect(s.Convert(old, current, nil)).Should(Succeed())
 			Expect(s.Convert(new, desired, nil)).Should(Succeed())
