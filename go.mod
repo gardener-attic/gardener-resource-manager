@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
-	github.com/gardener/gardener v1.26.0
+	github.com/gardener/gardener v1.26.1
 	github.com/gardener/gardener-resource-manager/api v0.0.0-00010101000000-000000000000
 	github.com/gardener/hvpa-controller v0.3.1
 	github.com/go-logr/logr v0.4.0
