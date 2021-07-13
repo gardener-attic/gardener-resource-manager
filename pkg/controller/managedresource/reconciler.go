@@ -26,6 +26,7 @@ import (
 
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
 	resourcesv1alpha1helper "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1/helper"
+	"github.com/gardener/gardener/pkg/controllerutils"
 	"github.com/hashicorp/go-multierror"
 
 	"github.com/gardener/gardener-resource-manager/pkg/controller/utils"
@@ -122,7 +123,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 func (r *Reconciler) reconcile(ctx context.Context, mr *resourcesv1alpha1.ManagedResource, log logr.Logger) (ctrl.Result, error) {
 	log.Info("Starting to reconcile ManagedResource")
 
-	if err := utils.EnsureFinalizer(ctx, r.client, r.class.FinalizerName(), mr); err != nil {
+	if err := controllerutils.PatchAddFinalizers(ctx, r.client, mr, r.class.FinalizerName()); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -394,7 +395,7 @@ func (r *Reconciler) delete(ctx context.Context, mr *resourcesv1alpha1.ManagedRe
 
 	log.Info("All resources have been deleted, removing finalizers from ManagedResource")
 
-	if err := utils.DeleteFinalizer(ctx, r.client, r.class.FinalizerName(), mr); err != nil {
+	if err := controllerutils.PatchRemoveFinalizers(ctx, r.client, mr, r.class.FinalizerName()); err != nil {
 		return reconcile.Result{}, fmt.Errorf("error removing finalizer from ManagedResource: %+v", err)
 	}
 
@@ -710,7 +711,7 @@ func (r *Reconciler) cleanOldResources(ctx context.Context, index *ObjectIndex, 
 			}
 
 			// consult service events for more details
-			eventsMsg, err := eventsForObject(ctx, r.targetClient, out.obj)
+			eventsMsg, err := eventsForObject(ctx, r.targetScheme, r.targetClient, out.obj)
 			if err != nil {
 				r.log.Error(err, "Error reading events for more information", "resource", resource)
 			} else if eventsMsg != "" {
@@ -807,7 +808,7 @@ func (r *Reconciler) releaseOrphanedResource(ctx context.Context, ref resourcesv
 	return nil
 }
 
-func eventsForObject(ctx context.Context, c client.Client, obj client.Object) (string, error) {
+func eventsForObject(ctx context.Context, scheme *runtime.Scheme, c client.Client, obj client.Object) (string, error) {
 	var (
 		relevantGKs = []schema.GroupKind{
 			corev1.SchemeGroupVersion.WithKind("Service").GroupKind(),
@@ -817,7 +818,7 @@ func eventsForObject(ctx context.Context, c client.Client, obj client.Object) (s
 
 	for _, gk := range relevantGKs {
 		if gk == obj.GetObjectKind().GroupVersionKind().GroupKind() {
-			return kutil.FetchEventMessages(ctx, c, obj, corev1.EventTypeWarning, eventLimit)
+			return kutil.FetchEventMessages(ctx, scheme, c, obj, corev1.EventTypeWarning, eventLimit)
 		}
 	}
 	return "", nil

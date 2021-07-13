@@ -40,7 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
 )
 
 var _ Option = &TargetClientOptions{}
@@ -180,14 +180,11 @@ func getTargetRESTConfig(kubeconfigPath string) (*rest.Config, error) {
 }
 
 func newCachedClient(cache cache.Cache, config rest.Config, options client.Options) (client.Client, error) {
-	return manager.
-		NewClientBuilder().
-		WithUncached(
-			&corev1.Event{},
-			&eventsv1beta1.Event{},
-			&eventsv1.Event{},
-		).
-		Build(cache, &config, options)
+	return cluster.DefaultNewClient(cache, &config, options,
+		&corev1.Event{},
+		&eventsv1beta1.Event{},
+		&eventsv1.Event{},
+	)
 }
 
 // Start starts the target cache if the client is cached.

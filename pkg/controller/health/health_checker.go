@@ -89,7 +89,7 @@ func CheckHealth(ctx context.Context, c client.Client, scheme *runtime.Scheme, o
 		if err := scheme.Convert(obj, service, nil); err != nil {
 			return err
 		}
-		return health.CheckService(ctx, c, service)
+		return health.CheckService(ctx, scheme, c, service)
 	case appsv1.SchemeGroupVersion.WithKind("StatefulSet").GroupKind():
 		statefulSet := &appsv1.StatefulSet{}
 		if err := scheme.Convert(obj, statefulSet, nil); err != nil {

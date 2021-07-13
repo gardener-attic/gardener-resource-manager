@@ -25,7 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -43,46 +42,6 @@ func EvalGenericPredicate(obj client.Object, predicates ...predicate.Predicate) 
 	}
 
 	return true
-}
-
-// EnsureFinalizer ensures that a finalizer of the given name is set on the given object.
-// If the finalizer is not set, it adds it to the list of finalizers and updates the remote object.
-func EnsureFinalizer(ctx context.Context, c client.Client, finalizerName string, obj client.Object) error {
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		if err := c.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
-			return err
-		}
-
-		if controllerutil.ContainsFinalizer(obj, finalizerName) {
-			return nil
-		}
-
-		beforePatch := obj.DeepCopyObject()
-
-		controllerutil.AddFinalizer(obj, finalizerName)
-
-		return c.Patch(ctx, obj, client.MergeFromWithOptions(beforePatch, client.MergeFromWithOptimisticLock{}))
-	})
-}
-
-// DeleteFinalizer ensures that the given finalizer is not present anymore in the given object.
-// If it is set, it removes it and issues an update.
-func DeleteFinalizer(ctx context.Context, c client.Client, finalizerName string, obj client.Object) error {
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		if err := c.Get(ctx, client.ObjectKeyFromObject(obj), obj); client.IgnoreNotFound(err) != nil {
-			return err
-		}
-
-		if !controllerutil.ContainsFinalizer(obj, finalizerName) {
-			return nil
-		}
-
-		beforePatch := obj.DeepCopyObject()
-
-		controllerutil.RemoveFinalizer(obj, finalizerName)
-
-		return c.Patch(ctx, obj, client.MergeFromWithOptions(beforePatch, client.MergeFromWithOptimisticLock{}))
-	})
 }
 
 // TryUpdate tries to apply the given transformation function onto the given object, and to update it afterwards.

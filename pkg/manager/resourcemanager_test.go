@@ -88,7 +88,7 @@ var _ = Describe("Resource Manager", func() {
 			})
 
 			expectedSecret.Type = corev1.SecretTypeOpaque
-			c.EXPECT().Create(ctx, gomock.AssignableToTypeOf(&corev1.Secret{})).DoAndReturn(func(_ context.Context, secret *corev1.Secret) error {
+			c.EXPECT().Create(ctx, gomock.AssignableToTypeOf(&corev1.Secret{})).DoAndReturn(func(_ context.Context, secret *corev1.Secret, _ ...client.CreateOption) error {
 				Expect(secret).To(BeSemanticallyEqualTo(expectedSecret))
 				return nil
 			})
@@ -163,7 +163,7 @@ var _ = Describe("Resource Manager", func() {
 				return apierrors.NewNotFound(corev1.Resource("managedresources"), managedResourceName)
 			})
 
-			c.EXPECT().Create(ctx, gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResource{})).DoAndReturn(func(_ context.Context, mr *resourcesv1alpha1.ManagedResource) error {
+			c.EXPECT().Create(ctx, gomock.AssignableToTypeOf(&resourcesv1alpha1.ManagedResource{})).DoAndReturn(func(_ context.Context, mr *resourcesv1alpha1.ManagedResource, _ ...client.CreateOption) error {
 				Expect(mr).To(BeSemanticallyEqualTo(expectedManagedResource))
 				return nil
 			})

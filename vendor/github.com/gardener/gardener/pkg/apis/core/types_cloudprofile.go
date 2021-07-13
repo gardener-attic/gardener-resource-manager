@@ -78,7 +78,7 @@ func (c *CloudProfile) GetProviderType() string {
 // SeedSelector contains constraints for selecting seed to be usable for shoots using a profile
 type SeedSelector struct {
 	// LabelSelector is optional and can be used to select seeds by their label settings
-	*metav1.LabelSelector
+	metav1.LabelSelector
 	// ProviderTypes contains a list of allowed provider types used by the Gardener scheduler to restricting seeds by
 	// their provider type and enable cross-provider scheduling.
 	// By default, Shoots are only scheduled on Seeds having the same provider type.
@@ -137,9 +137,12 @@ type MachineTypeStorage struct {
 	// Class is the class of the storage type.
 	Class string
 	// StorageSize is the storage size.
-	StorageSize resource.Quantity
+	StorageSize *resource.Quantity
 	// Type is the type of the storage.
 	Type string
+	// MinSize is the minimal supported storage size.
+	// This overrides any other common minimum size configuration in the `spec.volumeTypes[*].minSize`.
+	MinSize *resource.Quantity
 }
 
 // Region contains certain properties of a region.
@@ -172,6 +175,8 @@ type VolumeType struct {
 	Name string
 	// Usable defines if the volume type can be used for shoot clusters.
 	Usable *bool
+	// MinSize is the minimal supported storage size.
+	MinSize *resource.Quantity
 }
 
 const (

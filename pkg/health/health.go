@@ -26,6 +26,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -267,7 +268,7 @@ const eventLimit = 2
 
 // CheckService checks whether the given service is healthy.
 // A Service is considered unhealthy if it is of type `LoadBalancer` but doesn't have an ingress element in its status.
-func CheckService(ctx context.Context, c client.Client, service *corev1.Service) error {
+func CheckService(ctx context.Context, scheme *runtime.Scheme, c client.Client, service *corev1.Service) error {
 	if service.Spec.Type != corev1.ServiceTypeLoadBalancer {
 		return nil
 	}
@@ -276,7 +277,7 @@ func CheckService(ctx context.Context, c client.Client, service *corev1.Service)
 	}
 	// consult service events for more information
 	noIngressMsg := "service is missing ingress status"
-	eventsMsg, err := kutil.FetchEventMessages(ctx, c, service, corev1.EventTypeWarning, eventLimit)
+	eventsMsg, err := kutil.FetchEventMessages(ctx, scheme, c, service, corev1.EventTypeWarning, eventLimit)
 	if err != nil {
 		return fmt.Errorf("%s but couldn't read events for more information: %s", noIngressMsg, err)
 	}
