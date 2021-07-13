@@ -26,6 +26,7 @@ import (
 
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
 	resourcesv1alpha1helper "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1/helper"
+	"github.com/gardener/gardener/pkg/controllerutils"
 	"github.com/hashicorp/go-multierror"
 
 	"github.com/gardener/gardener-resource-manager/pkg/controller/utils"
@@ -122,7 +123,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 func (r *Reconciler) reconcile(ctx context.Context, mr *resourcesv1alpha1.ManagedResource, log logr.Logger) (ctrl.Result, error) {
 	log.Info("Starting to reconcile ManagedResource")
 
-	if err := utils.EnsureFinalizer(ctx, r.client, r.class.FinalizerName(), mr); err != nil {
+	if err := controllerutils.EnsureFinalizer(ctx, r.client, r.client, mr, r.class.FinalizerName()); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -394,7 +395,7 @@ func (r *Reconciler) delete(ctx context.Context, mr *resourcesv1alpha1.ManagedRe
 
 	log.Info("All resources have been deleted, removing finalizers from ManagedResource")
 
-	if err := utils.DeleteFinalizer(ctx, r.client, r.class.FinalizerName(), mr); err != nil {
+	if err := controllerutils.RemoveFinalizer(ctx, r.client, r.client, mr, r.class.FinalizerName()); err != nil {
 		return reconcile.Result{}, fmt.Errorf("error removing finalizer from ManagedResource: %+v", err)
 	}
 
