@@ -47,9 +47,9 @@ var _ Option = &TargetClientOptions{}
 
 // TargetClientOptions contains options needed to construct the target client.
 type TargetClientOptions struct {
-	kubeconfigPath    string
-	disableCache      bool
-	cacheResyncPeriod time.Duration
+	KubeconfigPath    string
+	DisableCache      bool
+	CacheResyncPeriod time.Duration
 
 	targetClient *TargetClientConfig
 }
@@ -67,16 +67,34 @@ type TargetClientConfig struct {
 
 // AddFlags adds the needed command line flags to the given FlagSet.
 func (o *TargetClientOptions) AddFlags(fs *pflag.FlagSet) {
-	fs.StringVar(&o.kubeconfigPath, "target-kubeconfig", "", "path to the kubeconfig for the target cluster")
-	fs.BoolVar(&o.disableCache, "target-disable-cache", false, "disable the cache for target cluster and always talk directly to the API server (defaults to false)")
-	fs.DurationVar(&o.cacheResyncPeriod, "target-cache-resync-period", 24*time.Hour, "duration how often the controller's cache for the target cluster is resynced")
+	fs.StringVar(&o.KubeconfigPath, "target-kubeconfig", "", "path to the kubeconfig for the target cluster")
+	fs.BoolVar(&o.DisableCache, "target-disable-cache", false, "disable the cache for target cluster and always talk directly to the API server (defaults to false)")
+	fs.DurationVar(&o.CacheResyncPeriod, "target-cache-resync-period", 24*time.Hour, "duration how often the controller's cache for the target cluster is resynced")
 }
 
 // Complete builds the target client based on the given flag values and saves it for retrieval via Completed.
 func (o *TargetClientOptions) Complete() error {
-	restConfig, err := getTargetRESTConfig(o.kubeconfigPath)
+	tcc, err := NewTargetClientConfig(o.KubeconfigPath, o.DisableCache, o.CacheResyncPeriod)
 	if err != nil {
-		return fmt.Errorf("unable to create REST config for target cluster: %w", err)
+		return err
+	}
+
+	o.targetClient = tcc
+	return nil
+}
+
+// Completed returns the constructed target clients including a RESTMapper and Scheme.
+// Before the first usage, Start and WaitForCacheSync should be called to ensure that the cache is running
+// and has been populated successfully.
+func (o *TargetClientOptions) Completed() *TargetClientConfig {
+	return o.targetClient
+}
+
+// NewTargetClientConfig creates a new target client config.
+func NewTargetClientConfig(kubeconfigPath string, disableCache bool, cacheResyncPeriod time.Duration) (*TargetClientConfig, error) {
+	restConfig, err := getTargetRESTConfig(kubeconfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create REST config for target cluster: %w", err)
 	}
 
 	// TODO: make this configurable
@@ -85,7 +103,7 @@ func (o *TargetClientOptions) Complete() error {
 
 	restMapper, err := getTargetRESTMapper(restConfig)
 	if err != nil {
-		return fmt.Errorf("unable to create REST mapper for target cluster: %w", err)
+		return nil, fmt.Errorf("unable to create REST mapper for target cluster: %w", err)
 	}
 
 	scheme := getTargetScheme()
@@ -95,24 +113,24 @@ func (o *TargetClientOptions) Complete() error {
 		targetClient client.Client
 	)
 
-	if o.disableCache {
+	if disableCache {
 		// create direct client for target cluster
 		targetClient, err = client.New(restConfig, client.Options{
 			Mapper: restMapper,
 			Scheme: scheme,
 		})
 		if err != nil {
-			return fmt.Errorf("unable to create client for target cluster: %w", err)
+			return nil, fmt.Errorf("unable to create client for target cluster: %w", err)
 		}
 	} else {
 		// create cached client for target cluster
 		targetCache, err = cache.New(restConfig, cache.Options{
 			Mapper: restMapper,
-			Resync: &o.cacheResyncPeriod,
+			Resync: &cacheResyncPeriod,
 			Scheme: scheme,
 		})
 		if err != nil {
-			return fmt.Errorf("unable to create client cache for target cluster: %w", err)
+			return nil, fmt.Errorf("unable to create client cache for target cluster: %w", err)
 		}
 
 		targetClient, err = newCachedClient(targetCache, *restConfig, client.Options{
@@ -120,24 +138,16 @@ func (o *TargetClientOptions) Complete() error {
 			Scheme: scheme,
 		})
 		if err != nil {
-			return fmt.Errorf("unable to create client for target cluster: %w", err)
+			return nil, fmt.Errorf("unable to create client for target cluster: %w", err)
 		}
 	}
 
-	o.targetClient = &TargetClientConfig{
+	return &TargetClientConfig{
 		Client:     targetClient,
 		RESTMapper: restMapper,
 		Scheme:     scheme,
 		cache:      targetCache,
-	}
-	return nil
-}
-
-// Completed returns the constructed target clients including a RESTMapper and Scheme.
-// Before the first usage, Start and WaitForCacheSync should be called to ensure that the cache is running
-// and has been populated successfully.
-func (o *TargetClientOptions) Completed() *TargetClientConfig {
-	return o.targetClient
+	}, nil
 }
 
 func getTargetScheme() *runtime.Scheme {
