@@ -17,6 +17,8 @@ controllers:
   managedResourceHealth:
     syncPeriod: 1m0s
     concurrentSyncs: 10
+  garbageCollector:
+    syncPeriod: ""
 
 leaderElection:
   enabled: true

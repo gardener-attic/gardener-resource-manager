@@ -40,6 +40,9 @@ spec:
         {{- if .Values.controllers.cacheResyncPeriod }}
         - --cache-resync-period={{ .Values.controllers.cacheResyncPeriod }}
         {{- end }}
+        {{- if .Values.controllers.garbageCollector.syncPeriod }}
+        - --garbage-collector-sync-period={{ .Values.controllers.garbageCollector.syncPeriod }}
+        {{- end }}
         - --sync-period={{ .Values.controllers.managedResource.syncPeriod }}
         - --max-concurrent-workers={{ .Values.controllers.managedResource.concurrentSyncs }}
         - --health-sync-period={{ .Values.controllers.managedResourceHealth.syncPeriod }}
