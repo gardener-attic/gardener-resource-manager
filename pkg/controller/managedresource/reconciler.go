@@ -123,7 +123,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 func (r *Reconciler) reconcile(ctx context.Context, mr *resourcesv1alpha1.ManagedResource, log logr.Logger) (ctrl.Result, error) {
 	log.Info("Starting to reconcile ManagedResource")
 
-	if err := controllerutils.EnsureFinalizer(ctx, r.client, r.client, mr, r.class.FinalizerName()); err != nil {
+	if err := controllerutils.PatchAddFinalizers(ctx, r.client, mr, r.class.FinalizerName()); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -395,7 +395,7 @@ func (r *Reconciler) delete(ctx context.Context, mr *resourcesv1alpha1.ManagedRe
 
 	log.Info("All resources have been deleted, removing finalizers from ManagedResource")
 
-	if err := controllerutils.RemoveFinalizer(ctx, r.client, r.client, mr, r.class.FinalizerName()); err != nil {
+	if err := controllerutils.PatchRemoveFinalizers(ctx, r.client, mr, r.class.FinalizerName()); err != nil {
 		return reconcile.Result{}, fmt.Errorf("error removing finalizer from ManagedResource: %+v", err)
 	}
 
