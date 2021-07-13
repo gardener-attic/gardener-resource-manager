@@ -711,7 +711,7 @@ func (r *Reconciler) cleanOldResources(ctx context.Context, index *ObjectIndex, 
 			}
 
 			// consult service events for more details
-			eventsMsg, err := eventsForObject(ctx, r.targetClient, out.obj)
+			eventsMsg, err := eventsForObject(ctx, r.targetScheme, r.targetClient, out.obj)
 			if err != nil {
 				r.log.Error(err, "Error reading events for more information", "resource", resource)
 			} else if eventsMsg != "" {
@@ -808,7 +808,7 @@ func (r *Reconciler) releaseOrphanedResource(ctx context.Context, ref resourcesv
 	return nil
 }
 
-func eventsForObject(ctx context.Context, c client.Client, obj client.Object) (string, error) {
+func eventsForObject(ctx context.Context, scheme *runtime.Scheme, c client.Client, obj client.Object) (string, error) {
 	var (
 		relevantGKs = []schema.GroupKind{
 			corev1.SchemeGroupVersion.WithKind("Service").GroupKind(),
@@ -818,7 +818,7 @@ func eventsForObject(ctx context.Context, c client.Client, obj client.Object) (s
 
 	for _, gk := range relevantGKs {
 		if gk == obj.GetObjectKind().GroupVersionKind().GroupKind() {
-			return kutil.FetchEventMessages(ctx, c, obj, corev1.EventTypeWarning, eventLimit)
+			return kutil.FetchEventMessages(ctx, scheme, c, obj, corev1.EventTypeWarning, eventLimit)
 		}
 	}
 	return "", nil

@@ -504,6 +504,7 @@ var _ = Describe("health", func() {
 
 		DescribeTable("services",
 			func(service *corev1.Service, matcher types.GomegaMatcher) {
+				scheme := kubernetesscheme.Scheme
 				c := mockclient.NewMockClient(ctrl)
 				c.EXPECT().Scheme().Return(kubernetesscheme.Scheme).AnyTimes()
 
@@ -515,7 +516,7 @@ var _ = Describe("health", func() {
 						return nil
 					},
 				).MaxTimes(1)
-				err := health.CheckService(context.Background(), c, service)
+				err := health.CheckService(context.Background(), scheme, c, service)
 				Expect(err).To(matcher)
 			},
 			Entry("no LoadBalancer service", &corev1.Service{
