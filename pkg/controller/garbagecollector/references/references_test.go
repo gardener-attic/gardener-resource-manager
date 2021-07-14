@@ -69,10 +69,12 @@ var _ = Describe("References", func() {
 			configMap2            = "cm2"
 			configMap3            = "cm3"
 			configMap4            = "cm4"
+			configMap5            = "cm5"
 			secret1               = "secret1"
 			secret2               = "secret2"
 			secret3               = "secret3"
 			secret4               = "secret4"
+			secret5               = "secret5"
 			additionalAnnotation1 = "foo"
 			additionalAnnotation2 = "bar"
 
@@ -87,6 +89,17 @@ var _ = Describe("References", func() {
 								ConfigMapRef: &corev1.ConfigMapEnvSource{
 									LocalObjectReference: corev1.LocalObjectReference{
 										Name: configMap3,
+									},
+								},
+							},
+						},
+						Env: []corev1.EnvVar{
+							{
+								ValueFrom: &corev1.EnvVarSource{
+									ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: configMap5,
+										},
 									},
 								},
 							},
@@ -112,6 +125,17 @@ var _ = Describe("References", func() {
 								ConfigMapRef: &corev1.ConfigMapEnvSource{
 									LocalObjectReference: corev1.LocalObjectReference{
 										Name: configMap4,
+									},
+								},
+							},
+						},
+						Env: []corev1.EnvVar{
+							{
+								ValueFrom: &corev1.EnvVarSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: secret5,
+										},
 									},
 								},
 							},
@@ -155,10 +179,12 @@ var _ = Describe("References", func() {
 				"reference/configmap_cm2":  "",
 				"reference/configmap_cm3":  "",
 				"reference/configmap_cm4":  "",
+				"reference/configmap_cm5":  "",
 				"reference/secret_secret1": "",
 				"reference/secret_secret2": "",
 				"reference/secret_secret3": "",
 				"reference/secret_secret4": "",
+				"reference/secret_secret5": "",
 				additionalAnnotation1:      "",
 				additionalAnnotation2:      "",
 			}
@@ -167,10 +193,12 @@ var _ = Describe("References", func() {
 				"reference/configmap_cm2":  "",
 				"reference/configmap_cm3":  "",
 				"reference/configmap_cm4":  "",
+				"reference/configmap_cm5":  "",
 				"reference/secret_secret1": "",
 				"reference/secret_secret2": "",
 				"reference/secret_secret3": "",
 				"reference/secret_secret4": "",
+				"reference/secret_secret5": "",
 				additionalAnnotation1:      "",
 				additionalAnnotation2:      "",
 			}

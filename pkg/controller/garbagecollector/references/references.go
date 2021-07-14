@@ -73,8 +73,9 @@ func KindAndNameFromAnnotationKey(key string) (kind, name string) {
 }
 
 // InjectAnnotations injects annotations into the annotation maps based on the referenced ConfigMaps/Secrets appearing
-// in the pod template spec's `.volumes[]` or `.containers[].envFrom[]` lists. Additional reference annotations can be
-// specified via the variadic parameter.
+// in the pod template spec's `.volumes[]` or `.containers[].envFrom[]` or `.containers[].env[].valueFrom[]` lists.
+// Additional reference annotations can be specified via the variadic parameter (expected format is that returned by
+// `AnnotationKey`).
 func InjectAnnotations(obj runtime.Object, additional ...string) {
 	switch o := obj.(type) {
 	case *corev1.Pod:
@@ -131,6 +132,16 @@ func computeAnnotations(spec corev1.PodSpec, additional ...string) map[string]st
 
 			if env.ConfigMapRef != nil {
 				out[AnnotationKey(KindConfigMap, env.ConfigMapRef.Name)] = ""
+			}
+		}
+
+		for _, env := range container.Env {
+			if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
+				out[AnnotationKey(KindSecret, env.ValueFrom.SecretKeyRef.Name)] = ""
+			}
+
+			if env.ValueFrom != nil && env.ValueFrom.ConfigMapKeyRef != nil {
+				out[AnnotationKey(KindConfigMap, env.ValueFrom.ConfigMapKeyRef.Name)] = ""
 			}
 		}
 	}

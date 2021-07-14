@@ -19,14 +19,14 @@ The following algorithm is implemented in the GC controller:
 1. List all `ConfigMap`s and `Secret`s labeled with `resources.gardener.cloud/garbage-collectable-reference=true`.
 1. List all `Deployment`s, `StatefulSet`s, `DaemonSet`s, `Job`s, `CronJob`s, `Pod`s and for each of them
    1. iterate over the `.metadata.annotations` and for each of them
-      1. If the annotation key follows the `reference/{configmap,secret}/<name>` scheme then consider it as "in-use".
+      1. If the annotation key follows the `reference/{configmap,secret}_<name>` scheme then consider it as "in-use".
 1. Delete all `ConfigMap`s and `Secret`s not considered as "in-use".
 
 Consequently, clients need to
 
 1. Create immutable `ConfigMap`s/`Secret`s with unique names (e.g., a checksum suffix based on the `.data`).
 1. Label such `ConfigMap`s/`Secret`s with `resources.gardener.cloud/garbage-collectable-reference=true`.
-1. Annotate their workload resources with `reference/{configmap,secret}/<name>=""` for all `ConfigMap`s/`Secret`s used by the containers of the respective `Pod`s.
+1. Annotate their workload resources with `reference/{configmap,secret}_<name>=""` for all `ConfigMap`s/`Secret`s used by the containers of the respective `Pod`s.
 
    ⚠️ Add such annotations to `.metadata.annotations` as well as to all templates of other resources (e.g., `.spec.template.metadata.annotations` in `Deployment`s or `.spec.jobTemplate.metadata.annotations` and `.spec.jobTemplate.spec.template.metadata.annotations` for `CronJob`s.
    This ensures that the GC controller does not unintentionally consider `ConfigMap`s/`Secret`s as "not in use" just because there isn't a `Pod` referencing them anymore (e.g., they could still be used by a `Deployment` scaled down to `0`).
@@ -66,6 +66,8 @@ spec:
 ```
 
 The GC controller would delete the `ConfigMap/test-1234` because it is considered as not "in-use".
+
+ℹ️ If the GC controller is activated then the `ManagedResource` controller will no longer delete `ConfigMap`s/`Secret`s having the above label.
 
 ## How to activate the garbage collector?
 

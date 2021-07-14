@@ -19,7 +19,6 @@ import (
 
 	"github.com/gardener/gardener-resource-manager/pkg/controller/garbagecollector/references"
 
-	"github.com/gardener/gardener/pkg/client/kubernetes"
 	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -29,6 +28,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -46,7 +46,7 @@ var _ = Describe("Collector", func() {
 
 	BeforeEach(func() {
 		logger = log.Log.WithName("test")
-		c = fakeclient.NewClientBuilder().WithScheme(kubernetes.SeedScheme).Build()
+		c = fakeclient.NewClientBuilder().WithScheme(scheme.Scheme).Build()
 		gc = &reconciler{logger, 0, c}
 	})
 

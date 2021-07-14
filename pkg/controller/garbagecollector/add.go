@@ -54,6 +54,7 @@ func AddToManagerWithOptions(mgr manager.Manager, conf ControllerConfig) error {
 	}
 
 	ctrl, err := crcontroller.New(ControllerName, mgr, crcontroller.Options{
+		MaxConcurrentReconciles: 1,
 		Reconciler: &reconciler{
 			syncPeriod:   conf.SyncPeriod,
 			targetClient: conf.TargetClientConfig.Client,
