@@ -89,6 +89,7 @@ func NewResourceManagerCommand() *cobra.Command {
 			if err := resourceControllerOpts.Completed().ApplyDefaultClusterId(ctx, entryLog, sourceClientOpts.Completed().RESTConfig); err != nil {
 				return err
 			}
+			resourceControllerOpts.Completed().GarbageCollectorActivated = gcControllerOpts.Completed().SyncPeriod > 0
 
 			uncachedTargetClientConfig, err := resourcemanagercmd.NewTargetClientConfig(targetClientOpts.KubeconfigPath, true, 0)
 			if err != nil {

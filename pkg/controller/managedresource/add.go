@@ -62,11 +62,12 @@ type ControllerOptions struct {
 
 // ControllerConfig is the completed configuration for the controller.
 type ControllerConfig struct {
-	MaxConcurrentWorkers int
-	SyncPeriod           time.Duration
-	ClassFilter          *filter.ClassFilter
-	AlwaysUpdate         bool
-	ClusterID            string
+	MaxConcurrentWorkers      int
+	SyncPeriod                time.Duration
+	ClassFilter               *filter.ClassFilter
+	AlwaysUpdate              bool
+	ClusterID                 string
+	GarbageCollectorActivated bool
 
 	TargetClientConfig resourcemanagercmd.TargetClientConfig
 }
@@ -79,13 +80,14 @@ func AddToManagerWithOptions(mgr manager.Manager, conf ControllerConfig) error {
 		Reconciler: extensionscontroller.OperationAnnotationWrapper(
 			func() client.Object { return &resourcesv1alpha1.ManagedResource{} },
 			&Reconciler{
-				targetClient:     conf.TargetClientConfig.Client,
-				targetRESTMapper: conf.TargetClientConfig.RESTMapper,
-				targetScheme:     conf.TargetClientConfig.Scheme,
-				class:            conf.ClassFilter,
-				alwaysUpdate:     conf.AlwaysUpdate,
-				syncPeriod:       conf.SyncPeriod,
-				clusterID:        conf.ClusterID,
+				targetClient:              conf.TargetClientConfig.Client,
+				targetRESTMapper:          conf.TargetClientConfig.RESTMapper,
+				targetScheme:              conf.TargetClientConfig.Scheme,
+				class:                     conf.ClassFilter,
+				alwaysUpdate:              conf.AlwaysUpdate,
+				syncPeriod:                conf.SyncPeriod,
+				clusterID:                 conf.ClusterID,
+				garbageCollectorActivated: conf.GarbageCollectorActivated,
 			},
 		),
 	})
@@ -114,7 +116,7 @@ func AddToManagerWithOptions(mgr manager.Manager, conf ControllerConfig) error {
 	return nil
 }
 
-// AddToManagerWithOptions adds the controller to a Manager using the default config.
+// AddToManager adds the controller to a Manager using the default config.
 func AddToManager(mgr manager.Manager) error {
 	return AddToManagerWithOptions(mgr, defaultControllerConfig)
 }
