@@ -16,20 +16,22 @@ package garbagecollector
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/gardener/gardener-resource-manager/pkg/controller/garbagecollector/references"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"github.com/gardener/gardener-resource-manager/pkg/controller/utils"
 
 	"github.com/go-logr/logr"
+	"github.com/hashicorp/go-multierror"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type reconciler struct {
@@ -43,10 +45,13 @@ func (r *reconciler) InjectLogger(l logr.Logger) error {
 	return nil
 }
 
-func (r *reconciler) Reconcile(ctx context.Context, _ reconcile.Request) (reconcile.Result, error) {
+func (r *reconciler) Reconcile(reconcileCtx context.Context, _ reconcile.Request) (reconcile.Result, error) {
+	ctx, cancel := context.WithTimeout(reconcileCtx, time.Minute)
+	defer cancel()
+
 	var (
 		labels                  = client.MatchingLabels{references.LabelKeyGarbageCollectable: references.LabelValueGarbageCollectable}
-		objectsToGarbageCollect = map[string]struct{}{}
+		objectsToGarbageCollect = map[objectId]struct{}{}
 	)
 
 	for _, resource := range []struct {
@@ -63,7 +68,7 @@ func (r *reconciler) Reconcile(ctx context.Context, _ reconcile.Request) (reconc
 		}
 
 		for _, obj := range objList.Items {
-			objectsToGarbageCollect[objectId(resource.kind, obj.Namespace, obj.Name)] = struct{}{}
+			objectsToGarbageCollect[objectId{resource.kind, obj.Namespace, obj.Name}] = struct{}{}
 		}
 	}
 
@@ -82,58 +87,68 @@ func (r *reconciler) Reconcile(ctx context.Context, _ reconcile.Request) (reconc
 		}
 
 		for _, objectMeta := range objList.Items {
-			for key := range objectMeta.Annotations {
-				objectKind, objectName := references.KindAndNameFromAnnotationKey(key)
+			for key, objectName := range objectMeta.Annotations {
+				objectKind := references.KindFromAnnotationKey(key)
 				if objectKind == "" || objectName == "" {
 					continue
 				}
 
-				delete(objectsToGarbageCollect, objectId(objectKind, objectMeta.Namespace, objectName))
+				delete(objectsToGarbageCollect, objectId{objectKind, objectMeta.Namespace, objectName})
 			}
 		}
 	}
 
-	for objId := range objectsToGarbageCollect {
-		var (
-			objectKind, namespace, name = detailsFromObjectId(objId)
-			meta                        = metav1.ObjectMeta{Namespace: namespace, Name: name}
-			obj                         client.Object
-		)
+	var (
+		results   = make(chan error, 1)
+		wg        wait.Group
+		errorList = &multierror.Error{ErrorFormat: utils.NewErrorFormatFuncWithPrefix("Could not delete all unused resources")}
+	)
 
-		switch objectKind {
-		case references.KindSecret:
-			obj = &corev1.Secret{ObjectMeta: meta}
-		case references.KindConfigMap:
-			obj = &corev1.ConfigMap{ObjectMeta: meta}
-		default:
-			continue
-		}
+	for id := range objectsToGarbageCollect {
+		objId := id
+		wg.StartWithContext(ctx, func(ctx context.Context) {
+			var (
+				meta = metav1.ObjectMeta{Namespace: objId.namespace, Name: objId.name}
+				obj  client.Object
+			)
 
-		r.log.Info("Delete resource",
-			"kind", objectKind,
-			"namespace", namespace,
-			"name", name,
-		)
+			switch objId.kind {
+			case references.KindSecret:
+				obj = &corev1.Secret{ObjectMeta: meta}
+			case references.KindConfigMap:
+				obj = &corev1.ConfigMap{ObjectMeta: meta}
+			default:
+				return
+			}
 
-		if err := r.targetClient.Delete(ctx, obj); client.IgnoreNotFound(err) != nil {
-			return reconcile.Result{}, err
+			r.log.Info("Delete resource",
+				"kind", objId.kind,
+				"namespace", objId.namespace,
+				"name", objId.name,
+			)
+
+			if err := r.targetClient.Delete(ctx, obj); client.IgnoreNotFound(err) != nil {
+				results <- err
+			}
+		})
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	for err := range results {
+		if err != nil {
+			errorList = multierror.Append(errorList, err)
 		}
 	}
 
-	return reconcile.Result{Requeue: true, RequeueAfter: r.syncPeriod}, nil
+	return reconcile.Result{Requeue: true, RequeueAfter: r.syncPeriod}, errorList.ErrorOrNil()
 }
 
-const objectIdDelimiter = "/"
-
-func objectId(kind, namespace, name string) string {
-	return string(kind) + objectIdDelimiter + namespace + objectIdDelimiter + name
-}
-
-func detailsFromObjectId(id string) (objKind, namespace, name string) {
-	split := strings.Split(id, objectIdDelimiter)
-
-	objKind = split[0]
-	namespace = split[1]
-	name = split[2]
-	return
+type objectId struct {
+	kind      string
+	namespace string
+	name      string
 }

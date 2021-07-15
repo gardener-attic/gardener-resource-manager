@@ -23,6 +23,8 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	appsv1beta1 "k8s.io/api/apps/v1beta1"
+	appsv1beta2 "k8s.io/api/apps/v1beta2"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,9 +34,9 @@ import (
 
 var _ = Describe("References", func() {
 	var (
-		kind = "some-kind"
-		name = "some-name"
-		key  = fmt.Sprintf("reference/%s_%s", kind, name)
+		kind = "kind"
+		name = "name"
+		key  = fmt.Sprintf("reference.resources.gardener.cloud/%s-82a3537f", kind)
 	)
 
 	Describe("#AnnotationKey", func() {
@@ -43,23 +45,17 @@ var _ = Describe("References", func() {
 		})
 	})
 
-	Describe("#KindAndNameFromAnnotationKey", func() {
-		It("should return the expected kind and name", func() {
-			returnedKind, returnedName := KindAndNameFromAnnotationKey(key)
-			Expect(returnedKind).To(Equal(kind))
-			Expect(returnedName).To(Equal(name))
+	Describe("#KindFromAnnotationKey", func() {
+		It("should return the expected kind", func() {
+			Expect(KindFromAnnotationKey(key)).To(Equal(kind))
 		})
 
-		It("should return empty values because key doesn't start as expected", func() {
-			returnedKind, returnedName := KindAndNameFromAnnotationKey("foobar/secret/name")
-			Expect(returnedKind).To(BeEmpty())
-			Expect(returnedName).To(BeEmpty())
+		It("should return empty string because key doesn't start as expected", func() {
+			Expect(KindFromAnnotationKey("foobar/secret/name")).To(BeEmpty())
 		})
 
-		It("should return empty values because key doesn't match expected format", func() {
-			returnedKind, returnedName := KindAndNameFromAnnotationKey("reference/secret/name/foo")
-			Expect(returnedKind).To(BeEmpty())
-			Expect(returnedName).To(BeEmpty())
+		It("should return empty string because key doesn't match expected format", func() {
+			Expect(KindFromAnnotationKey("reference.resources.gardener.cloud/secret/name/foo")).To(BeEmpty())
 		})
 	})
 
@@ -174,33 +170,33 @@ var _ = Describe("References", func() {
 				},
 			}
 			expectedAnnotationsWithExisting = map[string]string{
-				"some-existing":            "annotation",
-				"reference/configmap_cm1":  "",
-				"reference/configmap_cm2":  "",
-				"reference/configmap_cm3":  "",
-				"reference/configmap_cm4":  "",
-				"reference/configmap_cm5":  "",
-				"reference/secret_secret1": "",
-				"reference/secret_secret2": "",
-				"reference/secret_secret3": "",
-				"reference/secret_secret4": "",
-				"reference/secret_secret5": "",
-				additionalAnnotation1:      "",
-				additionalAnnotation2:      "",
+				"some-existing":                          "annotation",
+				AnnotationKey(KindConfigMap, configMap1): configMap1,
+				AnnotationKey(KindConfigMap, configMap2): configMap2,
+				AnnotationKey(KindConfigMap, configMap3): configMap3,
+				AnnotationKey(KindConfigMap, configMap4): configMap4,
+				AnnotationKey(KindConfigMap, configMap5): configMap5,
+				AnnotationKey(KindSecret, secret1):       secret1,
+				AnnotationKey(KindSecret, secret2):       secret2,
+				AnnotationKey(KindSecret, secret3):       secret3,
+				AnnotationKey(KindSecret, secret4):       secret4,
+				AnnotationKey(KindSecret, secret5):       secret5,
+				additionalAnnotation1:                    "",
+				additionalAnnotation2:                    "",
 			}
 			expectedAnnotationsWithoutExisting = map[string]string{
-				"reference/configmap_cm1":  "",
-				"reference/configmap_cm2":  "",
-				"reference/configmap_cm3":  "",
-				"reference/configmap_cm4":  "",
-				"reference/configmap_cm5":  "",
-				"reference/secret_secret1": "",
-				"reference/secret_secret2": "",
-				"reference/secret_secret3": "",
-				"reference/secret_secret4": "",
-				"reference/secret_secret5": "",
-				additionalAnnotation1:      "",
-				additionalAnnotation2:      "",
+				AnnotationKey(KindConfigMap, configMap1): configMap1,
+				AnnotationKey(KindConfigMap, configMap2): configMap2,
+				AnnotationKey(KindConfigMap, configMap3): configMap3,
+				AnnotationKey(KindConfigMap, configMap4): configMap4,
+				AnnotationKey(KindConfigMap, configMap5): configMap5,
+				AnnotationKey(KindSecret, secret1):       secret1,
+				AnnotationKey(KindSecret, secret2):       secret2,
+				AnnotationKey(KindSecret, secret3):       secret3,
+				AnnotationKey(KindSecret, secret4):       secret4,
+				AnnotationKey(KindSecret, secret5):       secret5,
+				additionalAnnotation1:                    "",
+				additionalAnnotation2:                    "",
 			}
 
 			pod = &corev1.Pod{
@@ -209,21 +205,31 @@ var _ = Describe("References", func() {
 				},
 				Spec: podSpec,
 			}
-			replicaSet = &appsv1.ReplicaSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: annotations,
-				},
-				Spec: appsv1.ReplicaSetSpec{
-					Template: corev1.PodTemplateSpec{
-						Spec: podSpec,
-					},
-				},
-			}
 			deployment = &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: annotations,
 				},
 				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: podSpec,
+					},
+				},
+			}
+			deploymentV1beta2 = &appsv1beta2.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: annotations,
+				},
+				Spec: appsv1beta2.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: podSpec,
+					},
+				},
+			}
+			deploymentV1beta1 = &appsv1beta1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: annotations,
+				},
+				Spec: appsv1beta1.DeploymentSpec{
 					Template: corev1.PodTemplateSpec{
 						Spec: podSpec,
 					},
@@ -239,11 +245,41 @@ var _ = Describe("References", func() {
 					},
 				},
 			}
+			statefulSetV1beta2 = &appsv1beta2.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: annotations,
+				},
+				Spec: appsv1beta2.StatefulSetSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: podSpec,
+					},
+				},
+			}
+			statefulSetV1beta1 = &appsv1beta1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: annotations,
+				},
+				Spec: appsv1beta1.StatefulSetSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: podSpec,
+					},
+				},
+			}
 			daemonSet = &appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: annotations,
 				},
 				Spec: appsv1.DaemonSetSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: podSpec,
+					},
+				},
+			}
+			daemonSetV1beta2 = &appsv1beta2.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: annotations,
+				},
+				Spec: appsv1beta2.DaemonSetSpec{
 					Template: corev1.PodTemplateSpec{
 						Spec: podSpec,
 					},
@@ -290,19 +326,12 @@ var _ = Describe("References", func() {
 		)
 
 		It("should do nothing because object is not handled", func() {
-			var (
-				obj            = &corev1.Service{}
-				expectedObject = obj.DeepCopy()
-			)
-
-			InjectAnnotations(obj, "foo")
-
-			Expect(obj).To(Equal(expectedObject))
+			Expect(InjectAnnotations(&corev1.Service{}, "foo")).To(MatchError(ContainSubstring("unhandled object type")))
 		})
 
 		DescribeTable("should behave properly",
 			func(obj runtime.Object, matchers ...func()) {
-				InjectAnnotations(obj, additionalAnnotation1, additionalAnnotation2)
+				Expect(InjectAnnotations(obj, additionalAnnotation1, additionalAnnotation2)).To(Succeed())
 
 				for _, matcher := range matchers {
 					matcher()
@@ -315,18 +344,25 @@ var _ = Describe("References", func() {
 					Expect(pod.Annotations).To(Equal(expectedAnnotationsWithExisting))
 				},
 			),
-			Entry("appsv1.ReplicaSet",
-				replicaSet,
-				func() {
-					Expect(replicaSet.Annotations).To(Equal(expectedAnnotationsWithExisting))
-					Expect(replicaSet.Spec.Template.Annotations).To(Equal(expectedAnnotationsWithoutExisting))
-				},
-			),
 			Entry("appsv1.Deployment",
 				deployment,
 				func() {
 					Expect(deployment.Annotations).To(Equal(expectedAnnotationsWithExisting))
 					Expect(deployment.Spec.Template.Annotations).To(Equal(expectedAnnotationsWithoutExisting))
+				},
+			),
+			Entry("appsv1beta2.Deployment",
+				deploymentV1beta2,
+				func() {
+					Expect(deploymentV1beta2.Annotations).To(Equal(expectedAnnotationsWithExisting))
+					Expect(deploymentV1beta2.Spec.Template.Annotations).To(Equal(expectedAnnotationsWithoutExisting))
+				},
+			),
+			Entry("appsv1beta1.Deployment",
+				deploymentV1beta1,
+				func() {
+					Expect(deploymentV1beta1.Annotations).To(Equal(expectedAnnotationsWithExisting))
+					Expect(deploymentV1beta1.Spec.Template.Annotations).To(Equal(expectedAnnotationsWithoutExisting))
 				},
 			),
 			Entry("appsv1.StatefulSet",
@@ -336,11 +372,32 @@ var _ = Describe("References", func() {
 					Expect(statefulSet.Spec.Template.Annotations).To(Equal(expectedAnnotationsWithoutExisting))
 				},
 			),
+			Entry("appsv1beta2.StatefulSet",
+				statefulSetV1beta2,
+				func() {
+					Expect(statefulSetV1beta2.Annotations).To(Equal(expectedAnnotationsWithExisting))
+					Expect(statefulSetV1beta2.Spec.Template.Annotations).To(Equal(expectedAnnotationsWithoutExisting))
+				},
+			),
+			Entry("appsv1beta1.StatefulSet",
+				statefulSetV1beta1,
+				func() {
+					Expect(statefulSetV1beta1.Annotations).To(Equal(expectedAnnotationsWithExisting))
+					Expect(statefulSetV1beta1.Spec.Template.Annotations).To(Equal(expectedAnnotationsWithoutExisting))
+				},
+			),
 			Entry("appsv1.DaemonSet",
 				daemonSet,
 				func() {
 					Expect(daemonSet.Annotations).To(Equal(expectedAnnotationsWithExisting))
 					Expect(daemonSet.Spec.Template.Annotations).To(Equal(expectedAnnotationsWithoutExisting))
+				},
+			),
+			Entry("appsv1beta2.DaemonSet",
+				daemonSetV1beta2,
+				func() {
+					Expect(daemonSetV1beta2.Annotations).To(Equal(expectedAnnotationsWithExisting))
+					Expect(daemonSetV1beta2.Spec.Template.Annotations).To(Equal(expectedAnnotationsWithoutExisting))
 				},
 			),
 			Entry("batchv1.Job",

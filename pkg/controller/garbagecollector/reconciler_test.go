@@ -252,7 +252,7 @@ func objectMetaFor(name, namespace string, objs ...runtime.Object) metav1.Object
 			kind, name = references.KindConfigMap, t.Name
 		}
 
-		annotations[references.AnnotationKey(kind, name)] = ""
+		annotations[references.AnnotationKey(kind, name)] = name
 	}
 
 	return metav1.ObjectMeta{

@@ -15,11 +15,16 @@
 package references
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"strings"
 
 	"github.com/gardener/gardener/pkg/utils"
 
 	appsv1 "k8s.io/api/apps/v1"
+	appsv1beta1 "k8s.io/api/apps/v1beta1"
+	appsv1beta2 "k8s.io/api/apps/v1beta2"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -36,10 +41,10 @@ const (
 	// workload.
 	LabelValueGarbageCollectable = "true"
 
-	delimiter = "_"
+	delimiter = "-"
 	// AnnotationKeyPrefix is a constant for the prefix used in annotations keys to indicate references to
 	// other resources.
-	AnnotationKeyPrefix = "reference/"
+	AnnotationKeyPrefix = "reference.resources.gardener.cloud/"
 	// KindConfigMap is a constant for the 'configmap' kind used in reference annotations.
 	KindConfigMap = "configmap"
 	// KindSecret is a constant for the 'secret' kind used in reference annotations.
@@ -48,14 +53,19 @@ const (
 
 // AnnotationKey computes a reference annotation key based on the given object kind and object name.
 func AnnotationKey(kind, name string) string {
-	return AnnotationKeyPrefix + kind + delimiter + name
+	var (
+		h         = sha256.Sum256([]byte(name))
+		sha256hex = hex.EncodeToString(h[:])
+	)
+
+	return AnnotationKeyPrefix + kind + delimiter + sha256hex[:8]
 }
 
-// KindAndNameFromAnnotationKey computes the object kind and object name based on the given reference annotation key. If
+// KindFromAnnotationKey computes the object kind and object name based on the given reference annotation key. If
 // the key is not valid then both return values will be empty.
-func KindAndNameFromAnnotationKey(key string) (kind, name string) {
+func KindFromAnnotationKey(key string) string {
 	if !strings.HasPrefix(key, AnnotationKeyPrefix) {
-		return
+		return ""
 	}
 
 	var (
@@ -64,30 +74,33 @@ func KindAndNameFromAnnotationKey(key string) (kind, name string) {
 	)
 
 	if len(split) != 2 {
-		return
+		return ""
 	}
 
-	kind = split[0]
-	name = split[1]
-	return
+	return split[0]
 }
 
 // InjectAnnotations injects annotations into the annotation maps based on the referenced ConfigMaps/Secrets appearing
 // in the pod template spec's `.volumes[]` or `.containers[].envFrom[]` or `.containers[].env[].valueFrom[]` lists.
 // Additional reference annotations can be specified via the variadic parameter (expected format is that returned by
 // `AnnotationKey`).
-func InjectAnnotations(obj runtime.Object, additional ...string) {
+func InjectAnnotations(obj runtime.Object, additional ...string) error {
 	switch o := obj.(type) {
 	case *corev1.Pod:
 		referenceAnnotations := computeAnnotations(o.Spec, additional...)
 		o.Annotations = utils.MergeStringMaps(o.Annotations, referenceAnnotations)
 
-	case *appsv1.ReplicaSet:
+	case *appsv1.Deployment:
 		referenceAnnotations := computeAnnotations(o.Spec.Template.Spec, additional...)
 		o.Annotations = utils.MergeStringMaps(o.Annotations, referenceAnnotations)
 		o.Spec.Template.Annotations = utils.MergeStringMaps(o.Spec.Template.Annotations, referenceAnnotations)
 
-	case *appsv1.Deployment:
+	case *appsv1beta2.Deployment:
+		referenceAnnotations := computeAnnotations(o.Spec.Template.Spec, additional...)
+		o.Annotations = utils.MergeStringMaps(o.Annotations, referenceAnnotations)
+		o.Spec.Template.Annotations = utils.MergeStringMaps(o.Spec.Template.Annotations, referenceAnnotations)
+
+	case *appsv1beta1.Deployment:
 		referenceAnnotations := computeAnnotations(o.Spec.Template.Spec, additional...)
 		o.Annotations = utils.MergeStringMaps(o.Annotations, referenceAnnotations)
 		o.Spec.Template.Annotations = utils.MergeStringMaps(o.Spec.Template.Annotations, referenceAnnotations)
@@ -97,7 +110,22 @@ func InjectAnnotations(obj runtime.Object, additional ...string) {
 		o.Annotations = utils.MergeStringMaps(o.Annotations, referenceAnnotations)
 		o.Spec.Template.Annotations = utils.MergeStringMaps(o.Spec.Template.Annotations, referenceAnnotations)
 
+	case *appsv1beta2.StatefulSet:
+		referenceAnnotations := computeAnnotations(o.Spec.Template.Spec, additional...)
+		o.Annotations = utils.MergeStringMaps(o.Annotations, referenceAnnotations)
+		o.Spec.Template.Annotations = utils.MergeStringMaps(o.Spec.Template.Annotations, referenceAnnotations)
+
+	case *appsv1beta1.StatefulSet:
+		referenceAnnotations := computeAnnotations(o.Spec.Template.Spec, additional...)
+		o.Annotations = utils.MergeStringMaps(o.Annotations, referenceAnnotations)
+		o.Spec.Template.Annotations = utils.MergeStringMaps(o.Spec.Template.Annotations, referenceAnnotations)
+
 	case *appsv1.DaemonSet:
+		referenceAnnotations := computeAnnotations(o.Spec.Template.Spec, additional...)
+		o.Annotations = utils.MergeStringMaps(o.Annotations, referenceAnnotations)
+		o.Spec.Template.Annotations = utils.MergeStringMaps(o.Spec.Template.Annotations, referenceAnnotations)
+
+	case *appsv1beta2.DaemonSet:
 		referenceAnnotations := computeAnnotations(o.Spec.Template.Spec, additional...)
 		o.Annotations = utils.MergeStringMaps(o.Annotations, referenceAnnotations)
 		o.Spec.Template.Annotations = utils.MergeStringMaps(o.Spec.Template.Annotations, referenceAnnotations)
@@ -118,7 +146,12 @@ func InjectAnnotations(obj runtime.Object, additional ...string) {
 		o.Annotations = utils.MergeStringMaps(o.Annotations, referenceAnnotations)
 		o.Spec.JobTemplate.Annotations = utils.MergeStringMaps(o.Spec.JobTemplate.Annotations, referenceAnnotations)
 		o.Spec.JobTemplate.Spec.Template.Annotations = utils.MergeStringMaps(o.Spec.JobTemplate.Spec.Template.Annotations, referenceAnnotations)
+
+	default:
+		return fmt.Errorf("unhandled object type %T", obj)
 	}
+
+	return nil
 }
 
 func computeAnnotations(spec corev1.PodSpec, additional ...string) map[string]string {
@@ -127,32 +160,32 @@ func computeAnnotations(spec corev1.PodSpec, additional ...string) map[string]st
 	for _, container := range spec.Containers {
 		for _, env := range container.EnvFrom {
 			if env.SecretRef != nil {
-				out[AnnotationKey(KindSecret, env.SecretRef.Name)] = ""
+				out[AnnotationKey(KindSecret, env.SecretRef.Name)] = env.SecretRef.Name
 			}
 
 			if env.ConfigMapRef != nil {
-				out[AnnotationKey(KindConfigMap, env.ConfigMapRef.Name)] = ""
+				out[AnnotationKey(KindConfigMap, env.ConfigMapRef.Name)] = env.ConfigMapRef.Name
 			}
 		}
 
 		for _, env := range container.Env {
 			if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
-				out[AnnotationKey(KindSecret, env.ValueFrom.SecretKeyRef.Name)] = ""
+				out[AnnotationKey(KindSecret, env.ValueFrom.SecretKeyRef.Name)] = env.ValueFrom.SecretKeyRef.Name
 			}
 
 			if env.ValueFrom != nil && env.ValueFrom.ConfigMapKeyRef != nil {
-				out[AnnotationKey(KindConfigMap, env.ValueFrom.ConfigMapKeyRef.Name)] = ""
+				out[AnnotationKey(KindConfigMap, env.ValueFrom.ConfigMapKeyRef.Name)] = env.ValueFrom.ConfigMapKeyRef.Name
 			}
 		}
 	}
 
 	for _, volume := range spec.Volumes {
 		if volume.Secret != nil {
-			out[AnnotationKey(KindSecret, volume.Secret.SecretName)] = ""
+			out[AnnotationKey(KindSecret, volume.Secret.SecretName)] = volume.Secret.SecretName
 		}
 
 		if volume.ConfigMap != nil {
-			out[AnnotationKey(KindConfigMap, volume.ConfigMap.Name)] = ""
+			out[AnnotationKey(KindConfigMap, volume.ConfigMap.Name)] = volume.ConfigMap.Name
 		}
 	}
 
