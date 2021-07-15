@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	resourcemanagercmd "github.com/gardener/gardener-resource-manager/pkg/cmd"
+	garbagecollectorcontroller "github.com/gardener/gardener-resource-manager/pkg/controller/garbagecollector"
 	healthcontroller "github.com/gardener/gardener-resource-manager/pkg/controller/health"
 	resourcecontroller "github.com/gardener/gardener-resource-manager/pkg/controller/managedresource"
 	secretcontroller "github.com/gardener/gardener-resource-manager/pkg/controller/secret"
@@ -48,6 +49,7 @@ func NewResourceManagerCommand() *cobra.Command {
 	resourceControllerOpts := &resourcecontroller.ControllerOptions{}
 	secretControllerOpts := &secretcontroller.ControllerOptions{}
 	healthControllerOpts := &healthcontroller.ControllerOptions{}
+	gcControllerOpts := &garbagecollectorcontroller.ControllerOptions{}
 
 	cmd := &cobra.Command{
 		Use:     "gardener-resource-manager",
@@ -69,6 +71,7 @@ func NewResourceManagerCommand() *cobra.Command {
 				resourceControllerOpts,
 				secretControllerOpts,
 				healthControllerOpts,
+				gcControllerOpts,
 			); err != nil {
 				return err
 			}
@@ -83,10 +86,16 @@ func NewResourceManagerCommand() *cobra.Command {
 			targetClientOpts.Completed().Apply(&healthControllerOpts.Completed().TargetClientConfig)
 			resourceControllerOpts.Completed().ApplyClassFilter(&secretControllerOpts.Completed().ClassFilter)
 			resourceControllerOpts.Completed().ApplyClassFilter(&healthControllerOpts.Completed().ClassFilter)
-			err := resourceControllerOpts.Completed().ApplyDefaultClusterId(ctx, entryLog, sourceClientOpts.Completed().RESTConfig)
+			if err := resourceControllerOpts.Completed().ApplyDefaultClusterId(ctx, entryLog, sourceClientOpts.Completed().RESTConfig); err != nil {
+				return err
+			}
+			resourceControllerOpts.Completed().GarbageCollectorActivated = gcControllerOpts.Completed().SyncPeriod > 0
+
+			uncachedTargetClientConfig, err := resourcemanagercmd.NewTargetClientConfig(targetClientOpts.KubeconfigPath, true, 0)
 			if err != nil {
 				return err
 			}
+			uncachedTargetClientConfig.Apply(&gcControllerOpts.Completed().TargetClientConfig)
 
 			// setup manager
 			mgr, err := manager.New(sourceClientOpts.Completed().RESTConfig, managerOptions)
@@ -100,6 +109,7 @@ func NewResourceManagerCommand() *cobra.Command {
 				resourcecontroller.AddToManager,
 				secretcontroller.AddToManager,
 				healthcontroller.AddToManager,
+				garbagecollectorcontroller.AddToManager,
 				healthz.AddToManager,
 			); err != nil {
 				return err
@@ -156,6 +166,7 @@ func NewResourceManagerCommand() *cobra.Command {
 		resourceControllerOpts,
 		secretControllerOpts,
 		healthControllerOpts,
+		gcControllerOpts,
 	)
 
 	return cmd

@@ -26,6 +26,7 @@ import (
 
 	resourcesv1alpha1 "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1"
 	resourcesv1alpha1helper "github.com/gardener/gardener-resource-manager/api/resources/v1alpha1/helper"
+	"github.com/gardener/gardener-resource-manager/pkg/controller/garbagecollector/references"
 	"github.com/gardener/gardener/pkg/controllerutils"
 	"github.com/hashicorp/go-multierror"
 
@@ -70,9 +71,10 @@ type Reconciler struct {
 	targetRESTMapper meta.RESTMapper
 	targetScheme     *runtime.Scheme
 
-	class        *filter.ClassFilter
-	alwaysUpdate bool
-	syncPeriod   time.Duration
+	class                     *filter.ClassFilter
+	alwaysUpdate              bool
+	syncPeriod                time.Duration
+	garbageCollectorActivated bool
 
 	clusterID string
 }
@@ -592,25 +594,28 @@ func ignoreMode(meta metav1.Object) bool {
 }
 
 func ignore(meta metav1.Object) bool {
-	return annotationExistsAndValueTrue(meta, resourcesv1alpha1.Ignore)
+	return keyExistsAndValueTrue(meta.GetAnnotations(), resourcesv1alpha1.Ignore)
 }
 
 func deleteOnInvalidUpdate(meta metav1.Object) bool {
-	return annotationExistsAndValueTrue(meta, resourcesv1alpha1.DeleteOnInvalidUpdate)
+	return keyExistsAndValueTrue(meta.GetAnnotations(), resourcesv1alpha1.DeleteOnInvalidUpdate)
 }
 
 func keepObject(meta metav1.Object) bool {
-	return annotationExistsAndValueTrue(meta, resourcesv1alpha1.KeepObject)
+	return keyExistsAndValueTrue(meta.GetAnnotations(), resourcesv1alpha1.KeepObject)
 }
 
-func annotationExistsAndValueTrue(meta metav1.Object, key string) bool {
-	annotations := meta.GetAnnotations()
-	if annotations == nil {
+func isGarbageCollectableResource(meta metav1.Object) bool {
+	return keyExistsAndValueTrue(meta.GetLabels(), references.LabelKeyGarbageCollectable)
+}
+
+func keyExistsAndValueTrue(kv map[string]string, key string) bool {
+	if kv == nil {
 		return false
 	}
-	val, annotationExists := annotations[key]
+	val, exists := kv[key]
 	valueTrue, _ := strconv.ParseBool(val)
-	return annotationExists && valueTrue
+	return exists && valueTrue
 }
 
 func (r *Reconciler) cleanOldResources(ctx context.Context, index *ObjectIndex, mr *resourcesv1alpha1.ManagedResource) (bool, error) {
@@ -660,6 +665,12 @@ func (r *Reconciler) cleanOldResources(ctx context.Context, index *ObjectIndex, 
 
 				if keepObject(obj) {
 					r.log.Info("Keeping object in the system as "+resourcesv1alpha1.KeepObject+" annotation found", "resource", unstructuredToString(obj))
+					results <- &output{obj, false, nil}
+					return
+				}
+
+				if r.garbageCollectorActivated && isGarbageCollectableResource(obj) {
+					r.log.Info("Keeping object in the system as it is marked as 'garbage-collectable'", "resource", unstructuredToString(obj))
 					results <- &output{obj, false, nil}
 					return
 				}
