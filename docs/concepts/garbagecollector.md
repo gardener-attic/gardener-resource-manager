@@ -19,7 +19,7 @@ The following algorithm is implemented in the GC controller:
 1. List all `ConfigMap`s and `Secret`s labeled with `resources.gardener.cloud/garbage-collectable-reference=true`.
 1. List all `Deployment`s, `StatefulSet`s, `DaemonSet`s, `Job`s, `CronJob`s, `Pod`s and for each of them
    1. iterate over the `.metadata.annotations` and for each of them
-      1. If the annotation key follows the `reference.resources.gardener.cloud/{configmap,secret}-<hash>` scheme then consider it as "in-use".
+      1. If the annotation key follows the `reference.resources.gardener.cloud/{configmap,secret}-<hash>` scheme and the value equals `<name>` then consider it as "in-use".
 1. Delete all `ConfigMap`s and `Secret`s not considered as "in-use".
 
 Consequently, clients need to
@@ -30,6 +30,8 @@ Consequently, clients need to
 
    ⚠️ Add such annotations to `.metadata.annotations` as well as to all templates of other resources (e.g., `.spec.template.metadata.annotations` in `Deployment`s or `.spec.jobTemplate.metadata.annotations` and `.spec.jobTemplate.spec.template.metadata.annotations` for `CronJob`s.
    This ensures that the GC controller does not unintentionally consider `ConfigMap`s/`Secret`s as "not in use" just because there isn't a `Pod` referencing them anymore (e.g., they could still be used by a `Deployment` scaled down to `0`).
+
+ℹ️ For the last step, there is a helper function `InjectAnnotations` in the `pkg/controller/garbagecollector/references` which you can use for your convenience.
 
 **Example:**
 

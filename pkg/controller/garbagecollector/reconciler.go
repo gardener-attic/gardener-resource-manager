@@ -49,6 +49,9 @@ func (r *reconciler) Reconcile(reconcileCtx context.Context, _ reconcile.Request
 	ctx, cancel := context.WithTimeout(reconcileCtx, time.Minute)
 	defer cancel()
 
+	r.log.Info("Starting garbage collection")
+	defer r.log.Info("Garbage collection finished")
+
 	var (
 		labels                  = client.MatchingLabels{references.LabelKeyGarbageCollectable: references.LabelValueGarbageCollectable}
 		objectsToGarbageCollect = map[objectId]struct{}{}
