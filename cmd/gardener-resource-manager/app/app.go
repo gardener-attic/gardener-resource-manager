@@ -22,6 +22,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"k8s.io/component-base/version"
+	"k8s.io/component-base/version/verflag"
 	runtimelog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
@@ -32,7 +34,6 @@ import (
 	secretcontroller "github.com/gardener/gardener-resource-manager/pkg/controller/secret"
 	"github.com/gardener/gardener-resource-manager/pkg/healthz"
 	logpkg "github.com/gardener/gardener-resource-manager/pkg/log"
-	"github.com/gardener/gardener-resource-manager/pkg/version"
 )
 
 var log = runtimelog.Log.WithName("gardener-resource-manager")
@@ -52,10 +53,11 @@ func NewResourceManagerCommand() *cobra.Command {
 	gcControllerOpts := &garbagecollectorcontroller.ControllerOptions{}
 
 	cmd := &cobra.Command{
-		Use:     "gardener-resource-manager",
-		Version: version.Get().GitVersion,
+		Use: "gardener-resource-manager",
 
 		RunE: func(cmd *cobra.Command, args []string) error {
+			verflag.PrintAndExitIfRequested()
+
 			ctx, cancel := context.WithCancel(cmd.Context())
 			defer cancel()
 
@@ -168,6 +170,7 @@ func NewResourceManagerCommand() *cobra.Command {
 		healthControllerOpts,
 		gcControllerOpts,
 	)
+	verflag.AddFlags(cmd.Flags())
 
 	return cmd
 }
