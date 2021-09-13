@@ -75,6 +75,7 @@ func (r *reconciler) Reconcile(reconcileCtx context.Context, _ reconcile.Request
 		}
 	}
 
+	var items []metav1.PartialObjectMetadata
 	for _, gvk := range []schema.GroupVersionKind{
 		appsv1.SchemeGroupVersion.WithKind("DeploymentList"),
 		appsv1.SchemeGroupVersion.WithKind("StatefulSetList"),
@@ -88,16 +89,17 @@ func (r *reconciler) Reconcile(reconcileCtx context.Context, _ reconcile.Request
 		if err := r.targetClient.List(ctx, objList); err != nil {
 			return reconcile.Result{}, err
 		}
+		items = append(items, objList.Items...)
+	}
 
-		for _, objectMeta := range objList.Items {
-			for key, objectName := range objectMeta.Annotations {
-				objectKind := references.KindFromAnnotationKey(key)
-				if objectKind == "" || objectName == "" {
-					continue
-				}
-
-				delete(objectsToGarbageCollect, objectId{objectKind, objectMeta.Namespace, objectName})
+	for _, objectMeta := range items {
+		for key, objectName := range objectMeta.Annotations {
+			objectKind := references.KindFromAnnotationKey(key)
+			if objectKind == "" || objectName == "" {
+				continue
 			}
+
+			delete(objectsToGarbageCollect, objectId{objectKind, objectMeta.Namespace, objectName})
 		}
 	}
 
