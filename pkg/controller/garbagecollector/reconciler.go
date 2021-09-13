@@ -34,6 +34,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+// Now is a function for returning the current time.
+// Exposed for testing.
+var Now = time.Now
+
 type reconciler struct {
 	log          logr.Logger
 	syncPeriod   time.Duration
@@ -44,6 +48,8 @@ func (r *reconciler) InjectLogger(l logr.Logger) error {
 	r.log = l.WithName(ControllerName)
 	return nil
 }
+
+const minimumObjectLifetime = 10 * time.Minute
 
 func (r *reconciler) Reconcile(reconcileCtx context.Context, _ reconcile.Request) (reconcile.Result, error) {
 	ctx, cancel := context.WithTimeout(reconcileCtx, time.Minute)
@@ -71,6 +77,11 @@ func (r *reconciler) Reconcile(reconcileCtx context.Context, _ reconcile.Request
 		}
 
 		for _, obj := range objList.Items {
+			if obj.CreationTimestamp.Add(minimumObjectLifetime).UTC().After(Now().UTC()) {
+				// Do not consider recently created objects for garbage collection.
+				continue
+			}
+
 			objectsToGarbageCollect[objectId{resource.kind, obj.Namespace, obj.Name}] = struct{}{}
 		}
 	}

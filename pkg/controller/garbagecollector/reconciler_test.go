@@ -16,6 +16,7 @@ package garbagecollector
 
 import (
 	"context"
+	"time"
 
 	"github.com/gardener/gardener-resource-manager/pkg/controller/garbagecollector/references"
 
@@ -65,6 +66,7 @@ var _ = Describe("Collector", func() {
 			labeledSecret5       *corev1.Secret
 			labeledSecret6       *corev1.Secret
 			labeledSecret7       *corev1.Secret
+			labeledSecret8       *corev1.Secret
 
 			labeledConfigMap1       *corev1.ConfigMap
 			labeledConfigMap1System *corev1.ConfigMap
@@ -74,6 +76,9 @@ var _ = Describe("Collector", func() {
 			labeledConfigMap5       *corev1.ConfigMap
 			labeledConfigMap6       *corev1.ConfigMap
 			labeledConfigMap7       *corev1.ConfigMap
+			labeledConfigMap8       *corev1.ConfigMap
+
+			creationTimestamp = metav1.Date(2000, 5, 5, 5, 30, 0, 0, time.Local)
 		)
 
 		BeforeEach(func() {
@@ -106,6 +111,7 @@ var _ = Describe("Collector", func() {
 			labeledSecret5 = &corev1.Secret{ObjectMeta: labeledObjectMeta}
 			labeledSecret6 = &corev1.Secret{ObjectMeta: labeledObjectMeta}
 			labeledSecret7 = &corev1.Secret{ObjectMeta: labeledObjectMeta}
+			labeledSecret8 = &corev1.Secret{ObjectMeta: labeledObjectMeta}
 			labeledSecret1.Name += "1"
 			labeledSecret1System.Name += "1"
 			labeledSecret1System.Namespace = metav1.NamespaceSystem
@@ -115,6 +121,8 @@ var _ = Describe("Collector", func() {
 			labeledSecret5.Name += "5"
 			labeledSecret6.Name += "6"
 			labeledSecret7.Name += "7"
+			labeledSecret8.Name += "8"
+			labeledSecret8.CreationTimestamp = creationTimestamp
 
 			labeledConfigMap1 = &corev1.ConfigMap{ObjectMeta: labeledObjectMeta}
 			labeledConfigMap1System = &corev1.ConfigMap{ObjectMeta: labeledObjectMeta}
@@ -124,6 +132,7 @@ var _ = Describe("Collector", func() {
 			labeledConfigMap5 = &corev1.ConfigMap{ObjectMeta: labeledObjectMeta}
 			labeledConfigMap6 = &corev1.ConfigMap{ObjectMeta: labeledObjectMeta}
 			labeledConfigMap7 = &corev1.ConfigMap{ObjectMeta: labeledObjectMeta}
+			labeledConfigMap8 = &corev1.ConfigMap{ObjectMeta: labeledObjectMeta}
 			labeledConfigMap1.Name += "1"
 			labeledConfigMap1System.Name += "1"
 			labeledConfigMap1System.Namespace += metav1.NamespaceSystem
@@ -133,6 +142,8 @@ var _ = Describe("Collector", func() {
 			labeledConfigMap5.Name += "5"
 			labeledConfigMap6.Name += "6"
 			labeledConfigMap7.Name += "7"
+			labeledConfigMap8.Name += "8"
+			labeledConfigMap8.CreationTimestamp = creationTimestamp
 		})
 
 		It("should do nothing because no secrets or configmaps found", func() {
@@ -181,6 +192,10 @@ var _ = Describe("Collector", func() {
 		})
 
 		It("should delete the unused resources", func() {
+			oldNowFunc := Now
+			defer func() { Now = oldNowFunc }()
+			Now = func() time.Time { return creationTimestamp.Add(minimumObjectLifetime / 2) }
+
 			Expect(c.Create(ctx, labeledSecret1)).To(Succeed())
 			Expect(c.Create(ctx, labeledSecret1System)).To(Succeed())
 			Expect(c.Create(ctx, labeledSecret2)).To(Succeed())
@@ -189,6 +204,7 @@ var _ = Describe("Collector", func() {
 			Expect(c.Create(ctx, labeledSecret5)).To(Succeed())
 			Expect(c.Create(ctx, labeledSecret6)).To(Succeed())
 			Expect(c.Create(ctx, labeledSecret7)).To(Succeed())
+			Expect(c.Create(ctx, labeledSecret8)).To(Succeed())
 			Expect(c.Create(ctx, labeledConfigMap1)).To(Succeed())
 			Expect(c.Create(ctx, labeledConfigMap1System)).To(Succeed())
 			Expect(c.Create(ctx, labeledConfigMap2)).To(Succeed())
@@ -197,19 +213,20 @@ var _ = Describe("Collector", func() {
 			Expect(c.Create(ctx, labeledConfigMap5)).To(Succeed())
 			Expect(c.Create(ctx, labeledConfigMap6)).To(Succeed())
 			Expect(c.Create(ctx, labeledConfigMap7)).To(Succeed())
+			Expect(c.Create(ctx, labeledConfigMap8)).To(Succeed())
 
 			secretList := &corev1.SecretList{}
 			Expect(c.List(ctx, secretList)).To(Succeed())
 			Expect(secretList.Items).To(ConsistOf(
 				*labeledSecret1, *labeledSecret1System, *labeledSecret2, *labeledSecret3,
-				*labeledSecret4, *labeledSecret5, *labeledSecret6, *labeledSecret7,
+				*labeledSecret4, *labeledSecret5, *labeledSecret6, *labeledSecret7, *labeledSecret8,
 			))
 
 			configMapList := &corev1.ConfigMapList{}
 			Expect(c.List(ctx, configMapList)).To(Succeed())
 			Expect(configMapList.Items).To(ConsistOf(
 				*labeledConfigMap1, *labeledConfigMap1System, *labeledConfigMap2, *labeledConfigMap3,
-				*labeledConfigMap4, *labeledConfigMap5, *labeledConfigMap6, *labeledConfigMap7,
+				*labeledConfigMap4, *labeledConfigMap5, *labeledConfigMap6, *labeledConfigMap7, *labeledConfigMap8,
 			))
 
 			Expect(c.Create(ctx, &appsv1.Deployment{ObjectMeta: objectMetaFor("deploy1", metav1.NamespaceDefault, labeledSecret1, labeledConfigMap1)})).To(Succeed())
@@ -227,6 +244,7 @@ var _ = Describe("Collector", func() {
 			Expect(secretList.Items).To(ConsistOf(
 				*labeledSecret1, *labeledSecret2, *labeledSecret3,
 				*labeledSecret4, *labeledSecret5, *labeledSecret6,
+				*labeledSecret8,
 			))
 
 			configMapList = &corev1.ConfigMapList{}
@@ -234,6 +252,7 @@ var _ = Describe("Collector", func() {
 			Expect(configMapList.Items).To(ConsistOf(
 				*labeledConfigMap1, *labeledConfigMap2, *labeledConfigMap3,
 				*labeledConfigMap4, *labeledConfigMap5, *labeledConfigMap6,
+				*labeledConfigMap8,
 			))
 		})
 	})
