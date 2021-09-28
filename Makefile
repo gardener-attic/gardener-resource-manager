@@ -70,6 +70,7 @@ docker-push:
 install-requirements:
 	@go install -mod=vendor $(REPO_ROOT)/vendor/github.com/golang/mock/mockgen
 	@go install -mod=vendor $(REPO_ROOT)/vendor/github.com/onsi/ginkgo/ginkgo
+	@GOBIN="$(REPO_ROOT)/bin" go install -mod=vendor $(REPO_ROOT)/vendor/sigs.k8s.io/controller-tools/cmd/controller-gen
 	@$(REPO_ROOT)/vendor/github.com/gardener/gardener/hack/install-requirements.sh
 
 .PHONY: revendor
@@ -98,6 +99,7 @@ check:
 generate:
 	@$(REPO_ROOT)/vendor/github.com/gardener/gardener/hack/generate.sh ./cmd/... ./pkg/...
 	@cd $(REPO_ROOT)/api && GO111MODULE=on go generate ./...
+	@$(REPO_ROOT)/hack/generate-crds.sh
 
 .PHONY: format
 format:

@@ -47,6 +47,12 @@ const (
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:resource:scope=Namespaced,path=managedresources,shortName=mr,singular=managedresource
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name=Class,JSONPath=".spec.class",type=string,description="The class identifies which resource manager is responsible for this ManagedResource."
+// +kubebuilder:printcolumn:name=Applied,JSONPath=".status.conditions[?(@.type==\"ResourcesApplied\")].status",type=string,description="Indicates whether all resources have been applied."
+// +kubebuilder:printcolumn:name=Healthy,JSONPath=".status.conditions[?(@.type==\"ResourcesHealthy\")].status",type=string,description="Indicates whether all resources are healthy."
+// +kubebuilder:printcolumn:name=Age,JSONPath=".metadata.creationTimestamp",type=date,description="creation timestamp"
 
 // ManagedResource describes a list of managed resources.
 type ManagedResource struct {
