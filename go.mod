@@ -29,6 +29,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20210305001622-591a79e4bda7 // keep this value in sync with k8s.io/apiserver
 	k8s.io/utils v0.0.0-20210527160623-6fdb442a123b
 	sigs.k8s.io/controller-runtime v0.9.1
+	sigs.k8s.io/controller-tools v0.6.0
 )
 
 replace (
