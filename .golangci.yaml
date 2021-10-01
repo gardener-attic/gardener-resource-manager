@@ -1,7 +1,0 @@
-run:
-  concurrency: 4
-  deadline: 10m
-
-linters:
-  disable:
-  - unused
